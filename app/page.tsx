@@ -171,39 +171,6 @@ export default function Home() {
     },
   }[lang]
 
-  useEffect(() => {
-    const initAuth = async () => {
-      const { data } = await supabase.auth.getSession()
-      const currentUser = data.session?.user || null
-      setUser(currentUser)
-
-      if (currentUser) {
-        await fetchUserRole(currentUser.id)
-        await fetchVehicles()
-      }
-
-      setAuthLoading(false)
-    }
-
-    initAuth()
-
-    const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        const currentUser = session?.user || null
-        setUser(currentUser)
-
-        if (currentUser) {
-          await fetchUserRole(currentUser.id)
-          await fetchVehicles()
-        }
-
-        setAuthLoading(false)
-      }
-    )
-
-    return () => listener.subscription.unsubscribe()
-  }, [])
-
   const fetchUserRole = async (userId: string) => {
     const { data } = await supabase
       .from("user_profiles")
@@ -212,19 +179,6 @@ export default function Home() {
       .single()
 
     setRole(data?.role || "supervisor")
-  }
-
-  const login = async () => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) return alert(error.message)
-    setEmail("")
-    setPassword("")
-  }
-
-  const logout = async () => {
-    await supabase.auth.signOut()
-    setUser(null)
-    setRole("supervisor")
   }
 
   const fetchVehicles = async () => {
@@ -279,6 +233,99 @@ export default function Home() {
       fetchAccidents(),
       fetchDrivers(),
     ])
+  }
+
+  useEffect(() => {
+    let mounted = true
+
+    const initAuth = async () => {
+      try {
+        const { data } = await supabase.auth.getSession()
+        const currentUser = data.session?.user || null
+
+        if (!mounted) return
+
+        setUser(currentUser)
+
+        if (currentUser) {
+          await fetchUserRole(currentUser.id)
+          await fetchVehicles()
+        }
+      } catch (error) {
+        console.log("Auth error:", error)
+      } finally {
+        if (mounted) setAuthLoading(false)
+      }
+    }
+
+    initAuth()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      try {
+        const currentUser = session?.user || null
+
+        if (!mounted) return
+
+        setUser(currentUser)
+
+        if (currentUser) {
+          await fetchUserRole(currentUser.id)
+          await fetchVehicles()
+        } else {
+          setVehicles([])
+          setMaintenance([])
+          setBreakdowns([])
+          setAccidents([])
+          setDrivers([])
+        }
+      } catch (error) {
+        console.log("Auth change error:", error)
+      } finally {
+        if (mounted) setAuthLoading(false)
+      }
+    })
+
+    const timer = setTimeout(() => {
+      if (mounted) setAuthLoading(false)
+    }, 3000)
+
+    return () => {
+      mounted = false
+      clearTimeout(timer)
+      subscription.unsubscribe()
+    }
+  }, [])
+
+  const login = async () => {
+    setAuthLoading(true)
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
+
+    if (error) {
+      setAuthLoading(false)
+      alert(error.message)
+      return
+    }
+
+    setEmail("")
+    setPassword("")
+    setAuthLoading(false)
+  }
+
+  const logout = async () => {
+    await supabase.auth.signOut()
+    setUser(null)
+    setRole("supervisor")
+    setVehicles([])
+    setMaintenance([])
+    setBreakdowns([])
+    setAccidents([])
+    setDrivers([])
   }
 
   const resetForm = () => {
@@ -346,6 +393,7 @@ export default function Home() {
 
   const startEditVehicle = (vehicle: any) => {
     if (!canEditDelete) return
+
     setEditingId(vehicle.id)
     setVehicleType(vehicle.vehicle_type || "car")
     setPlate(vehicle.plate_number || "")
@@ -442,6 +490,7 @@ export default function Home() {
   const accidentCost = accidents.reduce((sum, r) => sum + Number(r.cost || 0), 0)
 
   const dir = lang === "ar" ? "rtl" : "ltr"
+
   const bg = darkMode
     ? "bg-[radial-gradient(circle_at_top,_#0f766e_0,_#020617_38%,_#020617_100%)] text-white"
     : "bg-[radial-gradient(circle_at_top,_#ccfbf1_0,_#f8fafc_35%,_#eef2ff_100%)] text-slate-900"
@@ -480,14 +529,32 @@ export default function Home() {
           <p className="text-center text-sm text-slate-500 mb-6">Mandobly Garage</p>
 
           <div className="grid gap-4">
-            <input placeholder={t.email} value={email} onChange={(e) => setEmail(e.target.value)} className={`border p-4 rounded-2xl outline-none ${input}`} />
-            <input type="password" placeholder={t.password} value={password} onChange={(e) => setPassword(e.target.value)} className={`border p-4 rounded-2xl outline-none ${input}`} />
+            <input
+              placeholder={t.email}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={`border p-4 rounded-2xl outline-none ${input}`}
+            />
 
-            <button onClick={login} className="bg-slate-950 text-white p-4 rounded-2xl font-bold hover:scale-[1.01] transition">
+            <input
+              type="password"
+              placeholder={t.password}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={`border p-4 rounded-2xl outline-none ${input}`}
+            />
+
+            <button
+              onClick={login}
+              className="bg-slate-950 text-white p-4 rounded-2xl font-bold hover:scale-[1.01] transition"
+            >
               {t.login}
             </button>
 
-            <button onClick={() => setLang(lang === "ar" ? "en" : "ar")} className="bg-teal-500 text-black p-4 rounded-2xl font-bold hover:scale-[1.01] transition">
+            <button
+              onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+              className="bg-teal-500 text-black p-4 rounded-2xl font-bold hover:scale-[1.01] transition"
+            >
               {lang === "ar" ? "English" : "العربية"}
             </button>
           </div>
@@ -503,6 +570,7 @@ export default function Home() {
           <div className="w-12 h-12 rounded-2xl bg-teal-500 flex items-center justify-center text-black">
             <Car />
           </div>
+
           <div>
             <h1 className="text-2xl font-black">Mandobly</h1>
             <p className="text-xs text-slate-400">Garage System</p>
@@ -523,7 +591,10 @@ export default function Home() {
           <SideButton active={activePage === "reports"} onClick={() => openPage("reports")} icon={<BarChart3 size={20} />}>{t.reports}</SideButton>
         </div>
 
-        <button onClick={logout} className="mt-6 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white p-3 rounded-2xl font-bold transition">
+        <button
+          onClick={logout}
+          className="mt-6 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white p-3 rounded-2xl font-bold transition"
+        >
           <LogOut size={18} />
           {t.logout}
         </button>
@@ -538,17 +609,26 @@ export default function Home() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <button onClick={() => setDarkMode(!darkMode)} className="bg-teal-500 text-black px-5 py-3 rounded-2xl font-bold flex items-center gap-2">
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="bg-teal-500 text-black px-5 py-3 rounded-2xl font-bold flex items-center gap-2"
+              >
                 {darkMode ? <Sun size={18} /> : <Moon size={18} />}
                 {darkMode ? t.light : t.dark}
               </button>
 
-              <button onClick={() => setLang(lang === "ar" ? "en" : "ar")} className="bg-slate-950 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2">
+              <button
+                onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+                className="bg-slate-950 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2"
+              >
                 <Languages size={18} />
                 {lang === "ar" ? "English" : "العربية"}
               </button>
 
-              <button onClick={logout} className="bg-red-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 md:hidden">
+              <button
+                onClick={logout}
+                className="bg-red-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 md:hidden"
+              >
                 <LogOut size={18} />
                 {t.logout}
               </button>
@@ -599,6 +679,7 @@ export default function Home() {
 
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
               <h3 className="text-2xl font-black">{t.vehicles}</h3>
+
               <div className="relative w-full md:w-96">
                 <Search className="absolute top-3.5 right-4 text-slate-400" size={20} />
                 <input placeholder={t.search} value={search} onChange={(e) => setSearch(e.target.value)} className={`border p-3 rounded-2xl w-full outline-none ${input}`} />
@@ -802,16 +883,14 @@ function SideButton({ active, onClick, children, icon }: any) {
 
 function Stat({ title, value, card, icon }: any) {
   return (
-    <motion.div
-      whileHover={{ y: -3 }}
-      className={`${card} p-5 md:p-6 rounded-[2rem]`}
-    >
+    <motion.div whileHover={{ y: -3 }} className={`${card} p-5 md:p-6 rounded-[2rem]`}>
       <div className="flex items-center justify-between">
         <p className="text-slate-500">{title}</p>
         <div className="w-11 h-11 rounded-2xl bg-teal-500/20 text-teal-500 flex items-center justify-center">
           {icon}
         </div>
       </div>
+
       <h3 className="text-4xl font-black mt-4">{value}</h3>
     </motion.div>
   )
@@ -819,13 +898,11 @@ function Stat({ title, value, card, icon }: any) {
 
 function ReportCard({ title, value, card, icon }: any) {
   return (
-    <motion.div
-      whileHover={{ scale: 1.02 }}
-      className={`${card} p-6 rounded-[2rem]`}
-    >
+    <motion.div whileHover={{ scale: 1.02 }} className={`${card} p-6 rounded-[2rem]`}>
       <div className="w-12 h-12 rounded-2xl bg-teal-500/20 text-teal-500 flex items-center justify-center mb-4">
         {icon}
       </div>
+
       <p className="text-slate-500">{title}</p>
       <h3 className="text-4xl font-black mt-3">{value}</h3>
     </motion.div>
