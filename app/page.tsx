@@ -22,6 +22,8 @@ import {
   Eye,
 } from "lucide-react"
 
+type Vehicle = any
+
 export default function Home() {
   const [lang, setLang] = useState<"ar" | "en">("ar")
   const [darkMode, setDarkMode] = useState(false)
@@ -30,10 +32,12 @@ export default function Home() {
   const [user, setUser] = useState<any>(null)
   const [role, setRole] = useState("supervisor")
   const [authLoading, setAuthLoading] = useState(true)
+  const [vehicleTable, setVehicleTable] = useState<"cars" | "vehicles">("cars")
+
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
 
-  const [vehicles, setVehicles] = useState<any[]>([])
+  const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [maintenance, setMaintenance] = useState<any[]>([])
   const [breakdowns, setBreakdowns] = useState<any[]>([])
   const [accidents, setAccidents] = useState<any[]>([])
@@ -109,7 +113,7 @@ export default function Home() {
       totalAccidentCost: "تكلفة الحوادث",
       dark: "الوضع الليلي",
       light: "الوضع العادي",
-      confirmDeleteVehicle: "هل تريد حذف هذه المركبة؟ سيتم حذف سجلاتها المرتبطة أيضًا.",
+      confirmDeleteVehicle: "هل تريد حذف هذه المركبة؟",
       confirmDeleteRecord: "هل تريد حذف هذا السجل؟",
     },
     en: {
@@ -166,10 +170,21 @@ export default function Home() {
       totalAccidentCost: "Accident Cost",
       dark: "Dark Mode",
       light: "Light Mode",
-      confirmDeleteVehicle: "Delete this vehicle? Related records will also be deleted.",
+      confirmDeleteVehicle: "Delete this vehicle?",
       confirmDeleteRecord: "Delete this record?",
     },
   }[lang]
+
+  const getVehicleValue = (v: any, key: string) => {
+    if (key === "plate") return v.plate_number || v.plate || ""
+    if (key === "model") return v.car_model || v.model || ""
+    if (key === "km") return v.current_km || v.mileage || 0
+    if (key === "type") return v.vehicle_type || "car"
+    if (key === "driver") return v.driver_name || v.driver || ""
+    return v[key]
+  }
+
+  const vehicleById = (id: any) => vehicles.find((v) => String(v.id) === String(id))
 
   const fetchUserRole = async (userId: string) => {
     const { data } = await supabase
@@ -182,10 +197,29 @@ export default function Home() {
   }
 
   const fetchVehicles = async () => {
-    const { data } = await supabase
+    let { data, error } = await supabase
       .from("cars")
       .select("*")
       .order("id", { ascending: false })
+
+    if (error) {
+      const result = await supabase
+        .from("vehicles")
+        .select("*")
+        .order("id", { ascending: false })
+
+      data = result.data
+      error = result.error
+      if (!error) setVehicleTable("vehicles")
+    } else {
+      setVehicleTable("cars")
+    }
+
+    if (error) {
+      console.log("Vehicles error:", error)
+      setVehicles([])
+      return
+    }
 
     setVehicles(data || [])
   }
@@ -193,7 +227,7 @@ export default function Home() {
   const fetchMaintenance = async () => {
     const { data } = await supabase
       .from("maintenance_records")
-      .select("*, cars(*)")
+      .select("*")
       .order("service_date", { ascending: false })
 
     setMaintenance(data || [])
@@ -202,7 +236,7 @@ export default function Home() {
   const fetchBreakdowns = async () => {
     const { data } = await supabase
       .from("breakdown_records")
-      .select("*, cars(*)")
+      .select("*")
       .order("breakdown_date", { ascending: false })
 
     setBreakdowns(data || [])
@@ -211,7 +245,7 @@ export default function Home() {
   const fetchAccidents = async () => {
     const { data } = await supabase
       .from("accident_records")
-      .select("*, cars(*)")
+      .select("*")
       .order("accident_date", { ascending: false })
 
     setAccidents(data || [])
@@ -220,31 +254,25 @@ export default function Home() {
   const fetchDrivers = async () => {
     const { data } = await supabase
       .from("car_drivers")
-      .select("*, cars(*)")
+      .select("*")
       .order("id", { ascending: false })
 
     setDrivers(data || [])
   }
 
   const fetchReports = async () => {
-    await Promise.all([
-      fetchMaintenance(),
-      fetchBreakdowns(),
-      fetchAccidents(),
-      fetchDrivers(),
-    ])
+    await Promise.all([fetchMaintenance(), fetchBreakdowns(), fetchAccidents(), fetchDrivers()])
   }
 
   useEffect(() => {
     let mounted = true
 
-    const initAuth = async () => {
+    const init = async () => {
       try {
         const { data } = await supabase.auth.getSession()
         const currentUser = data.session?.user || null
 
         if (!mounted) return
-
         setUser(currentUser)
 
         if (currentUser) {
@@ -252,44 +280,37 @@ export default function Home() {
           await fetchVehicles()
         }
       } catch (error) {
-        console.log("Auth error:", error)
+        console.log(error)
       } finally {
         if (mounted) setAuthLoading(false)
       }
     }
 
-    initAuth()
+    init()
 
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      try {
-        const currentUser = session?.user || null
+      const currentUser = session?.user || null
+      setUser(currentUser)
 
-        if (!mounted) return
-
-        setUser(currentUser)
-
-        if (currentUser) {
-          await fetchUserRole(currentUser.id)
-          await fetchVehicles()
-        } else {
-          setVehicles([])
-          setMaintenance([])
-          setBreakdowns([])
-          setAccidents([])
-          setDrivers([])
-        }
-      } catch (error) {
-        console.log("Auth change error:", error)
-      } finally {
-        if (mounted) setAuthLoading(false)
+      if (currentUser) {
+        await fetchUserRole(currentUser.id)
+        await fetchVehicles()
+      } else {
+        setVehicles([])
+        setMaintenance([])
+        setBreakdowns([])
+        setAccidents([])
+        setDrivers([])
       }
+
+      setAuthLoading(false)
     })
 
     const timer = setTimeout(() => {
       if (mounted) setAuthLoading(false)
-    }, 3000)
+    }, 2500)
 
     return () => {
       mounted = false
@@ -299,22 +320,15 @@ export default function Home() {
   }, [])
 
   const login = async () => {
-    setAuthLoading(true)
-
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    const { error } = await supabase.auth.signInWithPassword({ email, password })
 
     if (error) {
-      setAuthLoading(false)
       alert(error.message)
       return
     }
 
     setEmail("")
     setPassword("")
-    setAuthLoading(false)
   }
 
   const logout = async () => {
@@ -326,6 +340,7 @@ export default function Home() {
     setBreakdowns([])
     setAccidents([])
     setDrivers([])
+    window.location.href = "/"
   }
 
   const resetForm = () => {
@@ -344,37 +359,23 @@ export default function Home() {
       return
     }
 
-    if (editingId) {
-      await supabase
-        .from("cars")
-        .update({
-          vehicle_type: vehicleType,
-          plate_number: plate,
-          car_model: model,
-          color,
-          current_km: Number(mileage),
-          driver_name: driverName,
-        })
-        .eq("id", editingId)
+    const payload = {
+      vehicle_type: vehicleType,
+      plate_number: plate,
+      car_model: model,
+      color,
+      current_km: Number(mileage),
+      driver_name: driverName,
+    }
 
+    if (editingId) {
+      await supabase.from(vehicleTable).update(payload).eq("id", editingId)
       resetForm()
       fetchVehicles()
       return
     }
 
-    const { data } = await supabase
-      .from("cars")
-      .insert([
-        {
-          vehicle_type: vehicleType,
-          plate_number: plate,
-          car_model: model,
-          color,
-          current_km: Number(mileage),
-          driver_name: driverName,
-        },
-      ])
-      .select()
+    const { data } = await supabase.from(vehicleTable).insert([payload]).select()
 
     if (data?.[0]) {
       await supabase.from("car_drivers").insert([
@@ -395,12 +396,12 @@ export default function Home() {
     if (!canEditDelete) return
 
     setEditingId(vehicle.id)
-    setVehicleType(vehicle.vehicle_type || "car")
-    setPlate(vehicle.plate_number || "")
-    setModel(vehicle.car_model || "")
+    setVehicleType(getVehicleValue(vehicle, "type"))
+    setPlate(getVehicleValue(vehicle, "plate"))
+    setModel(getVehicleValue(vehicle, "model"))
     setColor(vehicle.color || "")
-    setMileage(String(vehicle.current_km || ""))
-    setDriverName(vehicle.driver_name || "")
+    setMileage(String(getVehicleValue(vehicle, "km") || ""))
+    setDriverName(getVehicleValue(vehicle, "driver"))
     setActivePage("vehicles")
     window.scrollTo({ top: 0, behavior: "smooth" })
   }
@@ -409,7 +410,7 @@ export default function Home() {
     if (!canEditDelete) return
     if (!confirm(t.confirmDeleteVehicle)) return
 
-    await supabase.from("cars").delete().eq("id", id)
+    await supabase.from(vehicleTable).delete().eq("id", id)
     fetchVehicles()
   }
 
@@ -442,49 +443,55 @@ export default function Home() {
   const filteredVehicles = vehicles.filter((v) => {
     const keyword = search.toLowerCase()
     return (
-      v.plate_number?.toLowerCase().includes(keyword) ||
-      v.car_model?.toLowerCase().includes(keyword) ||
-      v.driver_name?.toLowerCase().includes(keyword)
+      getVehicleValue(v, "plate")?.toLowerCase().includes(keyword) ||
+      getVehicleValue(v, "model")?.toLowerCase().includes(keyword) ||
+      getVehicleValue(v, "driver")?.toLowerCase().includes(keyword)
     )
   })
 
   const filteredMaintenance = maintenance.filter((r) => {
+    const v = vehicleById(r.car_id)
     const keyword = listSearch.toLowerCase()
-    return (
-      (r.cars?.plate_number?.toLowerCase().includes(keyword) ||
-        r.description?.toLowerCase().includes(keyword)) &&
-      (maintenanceFilter === "all" || r.type === maintenanceFilter)
-    )
+    const matchesSearch =
+      getVehicleValue(v || {}, "plate")?.toLowerCase().includes(keyword) ||
+      r.description?.toLowerCase().includes(keyword)
+
+    const matchesType = maintenanceFilter === "all" || r.type === maintenanceFilter
+    return matchesSearch && matchesType
   })
 
   const filteredBreakdowns = breakdowns.filter((r) => {
+    const v = vehicleById(r.car_id)
     const keyword = listSearch.toLowerCase()
     return (
-      r.cars?.plate_number?.toLowerCase().includes(keyword) ||
+      getVehicleValue(v || {}, "plate")?.toLowerCase().includes(keyword) ||
       r.description?.toLowerCase().includes(keyword)
     )
   })
 
   const filteredAccidents = accidents.filter((r) => {
+    const v = vehicleById(r.car_id)
     const keyword = listSearch.toLowerCase()
     return (
-      r.cars?.plate_number?.toLowerCase().includes(keyword) ||
+      getVehicleValue(v || {}, "plate")?.toLowerCase().includes(keyword) ||
       r.driver_name?.toLowerCase().includes(keyword) ||
       r.description?.toLowerCase().includes(keyword)
     )
   })
 
   const filteredDrivers = drivers.filter((r) => {
+    const v = vehicleById(r.car_id)
     const keyword = listSearch.toLowerCase()
-    return (
-      (r.cars?.plate_number?.toLowerCase().includes(keyword) ||
-        r.driver_name?.toLowerCase().includes(keyword)) &&
-      (driverFilter === "all" || r.driver_type === driverFilter)
-    )
+    const matchesSearch =
+      getVehicleValue(v || {}, "plate")?.toLowerCase().includes(keyword) ||
+      r.driver_name?.toLowerCase().includes(keyword)
+
+    const matchesType = driverFilter === "all" || r.driver_type === driverFilter
+    return matchesSearch && matchesType
   })
 
-  const totalCars = vehicles.filter((v) => v.vehicle_type !== "motorcycle").length
-  const totalMotorcycles = vehicles.filter((v) => v.vehicle_type === "motorcycle").length
+  const totalCars = vehicles.filter((v) => getVehicleValue(v, "type") !== "motorcycle").length
+  const totalMotorcycles = vehicles.filter((v) => getVehicleValue(v, "type") === "motorcycle").length
   const maintenanceCost = maintenance.reduce((sum, r) => sum + Number(r.cost || 0), 0)
   const breakdownCost = breakdowns.reduce((sum, r) => sum + Number(r.cost || 0), 0)
   const accidentCost = accidents.reduce((sum, r) => sum + Number(r.cost || 0), 0)
@@ -529,32 +536,14 @@ export default function Home() {
           <p className="text-center text-sm text-slate-500 mb-6">Mandobly Garage</p>
 
           <div className="grid gap-4">
-            <input
-              placeholder={t.email}
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className={`border p-4 rounded-2xl outline-none ${input}`}
-            />
+            <input placeholder={t.email} value={email} onChange={(e) => setEmail(e.target.value)} className={`border p-4 rounded-2xl outline-none ${input}`} />
+            <input type="password" placeholder={t.password} value={password} onChange={(e) => setPassword(e.target.value)} className={`border p-4 rounded-2xl outline-none ${input}`} />
 
-            <input
-              type="password"
-              placeholder={t.password}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className={`border p-4 rounded-2xl outline-none ${input}`}
-            />
-
-            <button
-              onClick={login}
-              className="bg-slate-950 text-white p-4 rounded-2xl font-bold hover:scale-[1.01] transition"
-            >
+            <button onClick={login} className="bg-slate-950 text-white p-4 rounded-2xl font-bold">
               {t.login}
             </button>
 
-            <button
-              onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-              className="bg-teal-500 text-black p-4 rounded-2xl font-bold hover:scale-[1.01] transition"
-            >
+            <button onClick={() => setLang(lang === "ar" ? "en" : "ar")} className="bg-teal-500 text-black p-4 rounded-2xl font-bold">
               {lang === "ar" ? "English" : "العربية"}
             </button>
           </div>
@@ -591,10 +580,7 @@ export default function Home() {
           <SideButton active={activePage === "reports"} onClick={() => openPage("reports")} icon={<BarChart3 size={20} />}>{t.reports}</SideButton>
         </div>
 
-        <button
-          onClick={logout}
-          className="mt-6 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white p-3 rounded-2xl font-bold transition"
-        >
+        <button onClick={logout} className="mt-6 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white p-3 rounded-2xl font-bold">
           <LogOut size={18} />
           {t.logout}
         </button>
@@ -609,26 +595,17 @@ export default function Home() {
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => setDarkMode(!darkMode)}
-                className="bg-teal-500 text-black px-5 py-3 rounded-2xl font-bold flex items-center gap-2"
-              >
+              <button onClick={() => setDarkMode(!darkMode)} className="bg-teal-500 text-black px-5 py-3 rounded-2xl font-bold flex items-center gap-2">
                 {darkMode ? <Sun size={18} /> : <Moon size={18} />}
                 {darkMode ? t.light : t.dark}
               </button>
 
-              <button
-                onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-                className="bg-slate-950 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2"
-              >
+              <button onClick={() => setLang(lang === "ar" ? "en" : "ar")} className="bg-slate-950 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2">
                 <Languages size={18} />
                 {lang === "ar" ? "English" : "العربية"}
               </button>
 
-              <button
-                onClick={logout}
-                className="bg-red-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 md:hidden"
-              >
+              <button onClick={logout} className="bg-red-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 md:hidden">
                 <LogOut size={18} />
                 {t.logout}
               </button>
@@ -697,20 +674,20 @@ export default function Home() {
                 >
                   <div className="flex items-center justify-between mb-5">
                     <div>
-                      <h4 className="text-3xl font-black">{vehicle.plate_number}</h4>
-                      <p className="text-slate-500">{vehicle.car_model}</p>
+                      <h4 className="text-3xl font-black">{getVehicleValue(vehicle, "plate")}</h4>
+                      <p className="text-slate-500">{getVehicleValue(vehicle, "model")}</p>
                     </div>
 
                     <div className="w-16 h-16 rounded-3xl bg-teal-500/20 text-teal-500 flex items-center justify-center">
-                      {vehicle.vehicle_type === "motorcycle" ? <Bike size={34} /> : <Car size={34} />}
+                      {getVehicleValue(vehicle, "type") === "motorcycle" ? <Bike size={34} /> : <Car size={34} />}
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-sm">
-                    <InfoLine label={t.type} value={vehicle.vehicle_type === "motorcycle" ? t.motorcycle : t.car} />
+                    <InfoLine label={t.type} value={getVehicleValue(vehicle, "type") === "motorcycle" ? t.motorcycle : t.car} />
                     <InfoLine label={t.color} value={vehicle.color || "-"} />
-                    <InfoLine label={t.driver} value={vehicle.driver_name || "-"} />
-                    <InfoLine label={t.mileage} value={`${vehicle.current_km || 0} KM`} />
+                    <InfoLine label={t.driver} value={getVehicleValue(vehicle, "driver") || "-"} />
+                    <InfoLine label={t.mileage} value={`${getVehicleValue(vehicle, "km") || 0} KM`} />
                   </div>
 
                   <div className={`grid gap-3 mt-6 ${canEditDelete ? "grid-cols-3" : "grid-cols-1"}`}>
@@ -748,23 +725,26 @@ export default function Home() {
             </select>
 
             <ListTable t={t} empty={t.noData} tableHead={tableHead}>
-              {filteredMaintenance.map((r, index) => (
-                <tr key={r.id} className="border-b border-slate-700/30 hover:bg-teal-500/10">
-                  <td className="p-4">{index + 1}</td>
-                  <td className="p-4">{r.cars?.plate_number || "-"}</td>
-                  <td className="p-4">{r.type === "oil_change" ? t.oilChange : t.consumablePart}</td>
-                  <td className="p-4">{r.service_date}</td>
-                  <td className="p-4">{r.odometer_km || "-"}</td>
-                  <td className="p-4">{r.description || "-"}</td>
-                  <td className="p-4">
-                    {canEditDelete ? (
-                      <button onClick={() => deleteRecord("maintenance_records", r.id)} className="bg-red-600 text-white px-3 py-2 rounded-xl">
-                        {t.delete}
-                      </button>
-                    ) : "-"}
-                  </td>
-                </tr>
-              ))}
+              {filteredMaintenance.map((r, index) => {
+                const v = vehicleById(r.car_id)
+                return (
+                  <tr key={r.id} className="border-b border-slate-700/30 hover:bg-teal-500/10">
+                    <td className="p-4">{index + 1}</td>
+                    <td className="p-4">{getVehicleValue(v || {}, "plate") || "-"}</td>
+                    <td className="p-4">{r.type === "oil_change" ? t.oilChange : t.consumablePart}</td>
+                    <td className="p-4">{r.service_date}</td>
+                    <td className="p-4">{r.odometer_km || "-"}</td>
+                    <td className="p-4">{r.description || "-"}</td>
+                    <td className="p-4">
+                      {canEditDelete ? (
+                        <button onClick={() => deleteRecord("maintenance_records", r.id)} className="bg-red-600 text-white px-3 py-2 rounded-xl">
+                          {t.delete}
+                        </button>
+                      ) : "-"}
+                    </td>
+                  </tr>
+                )
+              })}
             </ListTable>
           </ListSection>
         )}
@@ -772,23 +752,26 @@ export default function Home() {
         {activePage === "breakdowns" && (
           <ListSection title={t.breakdowns} search={listSearch} setSearch={setListSearch} searchLabel={t.search} card={card} input={input}>
             <ListTable t={t} empty={t.noData} tableHead={tableHead}>
-              {filteredBreakdowns.map((r, index) => (
-                <tr key={r.id} className="border-b border-slate-700/30 hover:bg-teal-500/10">
-                  <td className="p-4">{index + 1}</td>
-                  <td className="p-4">{r.cars?.plate_number || "-"}</td>
-                  <td className="p-4">{r.breakdown_date}</td>
-                  <td className="p-4">{r.description}</td>
-                  <td className="p-4">{r.cost} SAR</td>
-                  <td className="p-4">-</td>
-                  <td className="p-4">
-                    {canEditDelete ? (
-                      <button onClick={() => deleteRecord("breakdown_records", r.id)} className="bg-red-600 text-white px-3 py-2 rounded-xl">
-                        {t.delete}
-                      </button>
-                    ) : "-"}
-                  </td>
-                </tr>
-              ))}
+              {filteredBreakdowns.map((r, index) => {
+                const v = vehicleById(r.car_id)
+                return (
+                  <tr key={r.id} className="border-b border-slate-700/30 hover:bg-teal-500/10">
+                    <td className="p-4">{index + 1}</td>
+                    <td className="p-4">{getVehicleValue(v || {}, "plate") || "-"}</td>
+                    <td className="p-4">{r.breakdown_date}</td>
+                    <td className="p-4">{r.description}</td>
+                    <td className="p-4">{r.cost} SAR</td>
+                    <td className="p-4">-</td>
+                    <td className="p-4">
+                      {canEditDelete ? (
+                        <button onClick={() => deleteRecord("breakdown_records", r.id)} className="bg-red-600 text-white px-3 py-2 rounded-xl">
+                          {t.delete}
+                        </button>
+                      ) : "-"}
+                    </td>
+                  </tr>
+                )
+              })}
             </ListTable>
           </ListSection>
         )}
@@ -796,23 +779,26 @@ export default function Home() {
         {activePage === "accidents" && (
           <ListSection title={t.accidents} search={listSearch} setSearch={setListSearch} searchLabel={t.search} card={card} input={input}>
             <ListTable t={t} empty={t.noData} tableHead={tableHead}>
-              {filteredAccidents.map((r, index) => (
-                <tr key={r.id} className="border-b border-slate-700/30 hover:bg-teal-500/10">
-                  <td className="p-4">{index + 1}</td>
-                  <td className="p-4">{r.cars?.plate_number || "-"}</td>
-                  <td className="p-4">{r.driver_name || "-"}</td>
-                  <td className="p-4">{r.accident_date}</td>
-                  <td className="p-4">{r.driver_fault_percent}%</td>
-                  <td className="p-4">{r.cost} SAR</td>
-                  <td className="p-4">
-                    {canEditDelete ? (
-                      <button onClick={() => deleteRecord("accident_records", r.id)} className="bg-red-600 text-white px-3 py-2 rounded-xl">
-                        {t.delete}
-                      </button>
-                    ) : "-"}
-                  </td>
-                </tr>
-              ))}
+              {filteredAccidents.map((r, index) => {
+                const v = vehicleById(r.car_id)
+                return (
+                  <tr key={r.id} className="border-b border-slate-700/30 hover:bg-teal-500/10">
+                    <td className="p-4">{index + 1}</td>
+                    <td className="p-4">{getVehicleValue(v || {}, "plate") || "-"}</td>
+                    <td className="p-4">{r.driver_name || "-"}</td>
+                    <td className="p-4">{r.accident_date}</td>
+                    <td className="p-4">{r.driver_fault_percent}%</td>
+                    <td className="p-4">{r.cost} SAR</td>
+                    <td className="p-4">
+                      {canEditDelete ? (
+                        <button onClick={() => deleteRecord("accident_records", r.id)} className="bg-red-600 text-white px-3 py-2 rounded-xl">
+                          {t.delete}
+                        </button>
+                      ) : "-"}
+                    </td>
+                  </tr>
+                )
+              })}
             </ListTable>
           </ListSection>
         )}
@@ -826,23 +812,26 @@ export default function Home() {
             </select>
 
             <ListTable t={t} empty={t.noData} tableHead={tableHead}>
-              {filteredDrivers.map((r, index) => (
-                <tr key={r.id} className="border-b border-slate-700/30 hover:bg-teal-500/10">
-                  <td className="p-4">{index + 1}</td>
-                  <td className="p-4">{r.cars?.plate_number || "-"}</td>
-                  <td className="p-4">{r.driver_name}</td>
-                  <td className="p-4">{r.driver_type === "primary" ? t.primary : t.additional}</td>
-                  <td className="p-4">{r.shift_time || "-"}</td>
-                  <td className="p-4">{r.active ? "Active" : "Inactive"}</td>
-                  <td className="p-4">
-                    {canEditDelete ? (
-                      <button onClick={() => deleteRecord("car_drivers", r.id)} className="bg-red-600 text-white px-3 py-2 rounded-xl">
-                        {t.delete}
-                      </button>
-                    ) : "-"}
-                  </td>
-                </tr>
-              ))}
+              {filteredDrivers.map((r, index) => {
+                const v = vehicleById(r.car_id)
+                return (
+                  <tr key={r.id} className="border-b border-slate-700/30 hover:bg-teal-500/10">
+                    <td className="p-4">{index + 1}</td>
+                    <td className="p-4">{getVehicleValue(v || {}, "plate") || "-"}</td>
+                    <td className="p-4">{r.driver_name}</td>
+                    <td className="p-4">{r.driver_type === "primary" ? t.primary : t.additional}</td>
+                    <td className="p-4">{r.shift_time || "-"}</td>
+                    <td className="p-4">{r.active ? "Active" : "Inactive"}</td>
+                    <td className="p-4">
+                      {canEditDelete ? (
+                        <button onClick={() => deleteRecord("car_drivers", r.id)} className="bg-red-600 text-white px-3 py-2 rounded-xl">
+                          {t.delete}
+                        </button>
+                      ) : "-"}
+                    </td>
+                  </tr>
+                )
+              })}
             </ListTable>
           </ListSection>
         )}
@@ -870,9 +859,7 @@ function SideButton({ active, onClick, children, icon }: any) {
     <button
       onClick={onClick}
       className={`w-full flex items-center gap-3 p-3 rounded-2xl transition ${
-        active
-          ? "bg-teal-500 text-black font-black shadow-lg shadow-teal-500/30"
-          : "hover:bg-white/10 text-slate-300"
+        active ? "bg-teal-500 text-black font-black shadow-lg shadow-teal-500/30" : "hover:bg-white/10 text-slate-300"
       }`}
     >
       {icon}
@@ -890,7 +877,6 @@ function Stat({ title, value, card, icon }: any) {
           {icon}
         </div>
       </div>
-
       <h3 className="text-4xl font-black mt-4">{value}</h3>
     </motion.div>
   )
@@ -902,7 +888,6 @@ function ReportCard({ title, value, card, icon }: any) {
       <div className="w-12 h-12 rounded-2xl bg-teal-500/20 text-teal-500 flex items-center justify-center mb-4">
         {icon}
       </div>
-
       <p className="text-slate-500">{title}</p>
       <h3 className="text-4xl font-black mt-3">{value}</h3>
     </motion.div>
@@ -923,7 +908,6 @@ function ListSection({ title, search, setSearch, searchLabel, children, card, in
     <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className={`${card} p-6 rounded-[2rem]`}>
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-6">
         <h3 className="text-2xl font-black">{title}</h3>
-
         <div className="flex flex-col md:flex-row gap-3">
           <input
             placeholder={searchLabel}
@@ -931,11 +915,9 @@ function ListSection({ title, search, setSearch, searchLabel, children, card, in
             onChange={(e) => setSearch(e.target.value)}
             className={`border p-3 rounded-2xl outline-none ${input}`}
           />
-
           {children?.[0]?.type === "select" ? children[0] : null}
         </div>
       </div>
-
       {children?.[0]?.type === "select" ? children[1] : children}
     </motion.div>
   )
