@@ -22,8 +22,6 @@ import {
   Eye,
 } from "lucide-react"
 
-type Vehicle = any
-
 export default function Home() {
   const [lang, setLang] = useState<"ar" | "en">("ar")
   const [darkMode, setDarkMode] = useState(false)
@@ -32,12 +30,11 @@ export default function Home() {
   const [user, setUser] = useState<any>(null)
   const [role, setRole] = useState("supervisor")
   const [authLoading, setAuthLoading] = useState(true)
-  const [vehicleTable, setVehicleTable] = useState<"cars" | "vehicles">("cars")
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
 
-  const [vehicles, setVehicles] = useState<Vehicle[]>([])
+  const [vehicles, setVehicles] = useState<any[]>([])
   const [maintenance, setMaintenance] = useState<any[]>([])
   const [breakdowns, setBreakdowns] = useState<any[]>([])
   const [accidents, setAccidents] = useState<any[]>([])
@@ -176,47 +173,36 @@ export default function Home() {
   }[lang]
 
   const getVehicleValue = (v: any, key: string) => {
-    if (key === "plate") return v.plate_number || v.plate || ""
-    if (key === "model") return v.car_model || v.model || ""
-    if (key === "km") return v.current_km || v.mileage || 0
+    if (!v) return ""
+    if (key === "plate") return v.plate_number || ""
+    if (key === "model") return v.car_model || ""
+    if (key === "km") return v.current_km || 0
     if (key === "type") return v.vehicle_type || "car"
-    if (key === "driver") return v.driver_name || v.driver || ""
+    if (key === "driver") return v.driver_name || ""
     return v[key]
   }
 
-  const vehicleById = (id: any) => vehicles.find((v) => String(v.id) === String(id))
+  const vehicleById = (id: any) =>
+    vehicles.find((v) => String(v.id) === String(id))
 
   const fetchUserRole = async (userId: string) => {
     const { data } = await supabase
       .from("user_profiles")
       .select("role")
       .eq("id", userId)
-      .single()
+      .maybeSingle()
 
     setRole(data?.role || "supervisor")
   }
 
   const fetchVehicles = async () => {
-    let { data, error } = await supabase
+    const { data, error } = await supabase
       .from("cars")
       .select("*")
       .order("id", { ascending: false })
 
     if (error) {
-      const result = await supabase
-        .from("vehicles")
-        .select("*")
-        .order("id", { ascending: false })
-
-      data = result.data
-      error = result.error
-      if (!error) setVehicleTable("vehicles")
-    } else {
-      setVehicleTable("cars")
-    }
-
-    if (error) {
-      console.log("Vehicles error:", error)
+      console.log("cars error:", error)
       setVehicles([])
       return
     }
@@ -261,70 +247,57 @@ export default function Home() {
   }
 
   const fetchReports = async () => {
-    await Promise.all([fetchMaintenance(), fetchBreakdowns(), fetchAccidents(), fetchDrivers()])
+    await Promise.all([
+      fetchMaintenance(),
+      fetchBreakdowns(),
+      fetchAccidents(),
+      fetchDrivers(),
+    ])
   }
 
   useEffect(() => {
-    let mounted = true
-
     const init = async () => {
       try {
-        const { data } = await supabase.auth.getSession()
-        const currentUser = data.session?.user || null
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
 
-        if (!mounted) return
-        setUser(currentUser)
-
-        if (currentUser) {
-          await fetchUserRole(currentUser.id)
+        if (session?.user) {
+          setUser(session.user)
+          await fetchUserRole(session.user.id)
           await fetchVehicles()
+        } else {
+          setUser(null)
         }
       } catch (error) {
-        console.log(error)
+        console.log("init error:", error)
       } finally {
-        if (mounted) setAuthLoading(false)
+        setAuthLoading(false)
       }
     }
 
     init()
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      const currentUser = session?.user || null
-      setUser(currentUser)
-
-      if (currentUser) {
-        await fetchUserRole(currentUser.id)
-        await fetchVehicles()
-      } else {
-        setVehicles([])
-        setMaintenance([])
-        setBreakdowns([])
-        setAccidents([])
-        setDrivers([])
-      }
-
-      setAuthLoading(false)
-    })
-
-    const timer = setTimeout(() => {
-      if (mounted) setAuthLoading(false)
-    }, 2500)
-
-    return () => {
-      mounted = false
-      clearTimeout(timer)
-      subscription.unsubscribe()
-    }
   }, [])
 
   const login = async () => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    })
 
     if (error) {
       alert(error.message)
       return
+    }
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (session?.user) {
+      setUser(session.user)
+      await fetchUserRole(session.user.id)
+      await fetchVehicles()
     }
 
     setEmail("")
@@ -369,13 +342,13 @@ export default function Home() {
     }
 
     if (editingId) {
-      await supabase.from(vehicleTable).update(payload).eq("id", editingId)
+      await supabase.from("cars").update(payload).eq("id", editingId)
       resetForm()
-      fetchVehicles()
+      await fetchVehicles()
       return
     }
 
-    const { data } = await supabase.from(vehicleTable).insert([payload]).select()
+    const { data } = await supabase.from("cars").insert([payload]).select()
 
     if (data?.[0]) {
       await supabase.from("car_drivers").insert([
@@ -389,7 +362,7 @@ export default function Home() {
     }
 
     resetForm()
-    fetchVehicles()
+    await fetchVehicles()
   }
 
   const startEditVehicle = (vehicle: any) => {
@@ -410,8 +383,8 @@ export default function Home() {
     if (!canEditDelete) return
     if (!confirm(t.confirmDeleteVehicle)) return
 
-    await supabase.from(vehicleTable).delete().eq("id", id)
-    fetchVehicles()
+    await supabase.from("cars").delete().eq("id", id)
+    await fetchVehicles()
   }
 
   const deleteRecord = async (table: string, id: number) => {
@@ -433,19 +406,19 @@ export default function Home() {
     setDriverFilter("all")
 
     if (page === "vehicles") await fetchVehicles()
-    if (page === "maintenance" && maintenance.length === 0) await fetchMaintenance()
-    if (page === "breakdowns" && breakdowns.length === 0) await fetchBreakdowns()
-    if (page === "accidents" && accidents.length === 0) await fetchAccidents()
-    if (page === "drivers" && drivers.length === 0) await fetchDrivers()
+    if (page === "maintenance") await fetchMaintenance()
+    if (page === "breakdowns") await fetchBreakdowns()
+    if (page === "accidents") await fetchAccidents()
+    if (page === "drivers") await fetchDrivers()
     if (page === "reports") await fetchReports()
   }
 
   const filteredVehicles = vehicles.filter((v) => {
     const keyword = search.toLowerCase()
     return (
-      getVehicleValue(v, "plate")?.toLowerCase().includes(keyword) ||
-      getVehicleValue(v, "model")?.toLowerCase().includes(keyword) ||
-      getVehicleValue(v, "driver")?.toLowerCase().includes(keyword)
+      getVehicleValue(v, "plate").toLowerCase().includes(keyword) ||
+      getVehicleValue(v, "model").toLowerCase().includes(keyword) ||
+      getVehicleValue(v, "driver").toLowerCase().includes(keyword)
     )
   })
 
@@ -453,18 +426,20 @@ export default function Home() {
     const v = vehicleById(r.car_id)
     const keyword = listSearch.toLowerCase()
     const matchesSearch =
-      getVehicleValue(v || {}, "plate")?.toLowerCase().includes(keyword) ||
+      getVehicleValue(v, "plate").toLowerCase().includes(keyword) ||
       r.description?.toLowerCase().includes(keyword)
 
-    const matchesType = maintenanceFilter === "all" || r.type === maintenanceFilter
-    return matchesSearch && matchesType
+    return (
+      matchesSearch &&
+      (maintenanceFilter === "all" || r.type === maintenanceFilter)
+    )
   })
 
   const filteredBreakdowns = breakdowns.filter((r) => {
     const v = vehicleById(r.car_id)
     const keyword = listSearch.toLowerCase()
     return (
-      getVehicleValue(v || {}, "plate")?.toLowerCase().includes(keyword) ||
+      getVehicleValue(v, "plate").toLowerCase().includes(keyword) ||
       r.description?.toLowerCase().includes(keyword)
     )
   })
@@ -473,7 +448,7 @@ export default function Home() {
     const v = vehicleById(r.car_id)
     const keyword = listSearch.toLowerCase()
     return (
-      getVehicleValue(v || {}, "plate")?.toLowerCase().includes(keyword) ||
+      getVehicleValue(v, "plate").toLowerCase().includes(keyword) ||
       r.driver_name?.toLowerCase().includes(keyword) ||
       r.description?.toLowerCase().includes(keyword)
     )
@@ -483,18 +458,33 @@ export default function Home() {
     const v = vehicleById(r.car_id)
     const keyword = listSearch.toLowerCase()
     const matchesSearch =
-      getVehicleValue(v || {}, "plate")?.toLowerCase().includes(keyword) ||
+      getVehicleValue(v, "plate").toLowerCase().includes(keyword) ||
       r.driver_name?.toLowerCase().includes(keyword)
 
-    const matchesType = driverFilter === "all" || r.driver_type === driverFilter
-    return matchesSearch && matchesType
+    return (
+      matchesSearch &&
+      (driverFilter === "all" || r.driver_type === driverFilter)
+    )
   })
 
-  const totalCars = vehicles.filter((v) => getVehicleValue(v, "type") !== "motorcycle").length
-  const totalMotorcycles = vehicles.filter((v) => getVehicleValue(v, "type") === "motorcycle").length
-  const maintenanceCost = maintenance.reduce((sum, r) => sum + Number(r.cost || 0), 0)
-  const breakdownCost = breakdowns.reduce((sum, r) => sum + Number(r.cost || 0), 0)
-  const accidentCost = accidents.reduce((sum, r) => sum + Number(r.cost || 0), 0)
+  const totalCars = vehicles.filter(
+    (v) => getVehicleValue(v, "type") !== "motorcycle"
+  ).length
+  const totalMotorcycles = vehicles.filter(
+    (v) => getVehicleValue(v, "type") === "motorcycle"
+  ).length
+  const maintenanceCost = maintenance.reduce(
+    (sum, r) => sum + Number(r.cost || 0),
+    0
+  )
+  const breakdownCost = breakdowns.reduce(
+    (sum, r) => sum + Number(r.cost || 0),
+    0
+  )
+  const accidentCost = accidents.reduce(
+    (sum, r) => sum + Number(r.cost || 0),
+    0
+  )
 
   const dir = lang === "ar" ? "rtl" : "ltr"
 
@@ -522,7 +512,10 @@ export default function Home() {
 
   if (!user) {
     return (
-      <main className={`min-h-screen flex items-center justify-center p-6 ${bg}`} dir={dir}>
+      <main
+        className={`min-h-screen flex items-center justify-center p-6 ${bg}`}
+        dir={dir}
+      >
         <motion.div
           initial={{ opacity: 0, y: 20, scale: 0.96 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -532,18 +525,40 @@ export default function Home() {
             <Car size={34} />
           </div>
 
-          <h1 className="text-3xl font-black mb-2 text-center">{t.loginTitle}</h1>
-          <p className="text-center text-sm text-slate-500 mb-6">Mandobly Garage</p>
+          <h1 className="text-3xl font-black mb-2 text-center">
+            {t.loginTitle}
+          </h1>
+          <p className="text-center text-sm text-slate-500 mb-6">
+            Mandobly Garage
+          </p>
 
           <div className="grid gap-4">
-            <input placeholder={t.email} value={email} onChange={(e) => setEmail(e.target.value)} className={`border p-4 rounded-2xl outline-none ${input}`} />
-            <input type="password" placeholder={t.password} value={password} onChange={(e) => setPassword(e.target.value)} className={`border p-4 rounded-2xl outline-none ${input}`} />
+            <input
+              placeholder={t.email}
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className={`border p-4 rounded-2xl outline-none ${input}`}
+            />
 
-            <button onClick={login} className="bg-slate-950 text-white p-4 rounded-2xl font-bold">
+            <input
+              type="password"
+              placeholder={t.password}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className={`border p-4 rounded-2xl outline-none ${input}`}
+            />
+
+            <button
+              onClick={login}
+              className="bg-slate-950 text-white p-4 rounded-2xl font-bold"
+            >
               {t.login}
             </button>
 
-            <button onClick={() => setLang(lang === "ar" ? "en" : "ar")} className="bg-teal-500 text-black p-4 rounded-2xl font-bold">
+            <button
+              onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+              className="bg-teal-500 text-black p-4 rounded-2xl font-bold"
+            >
               {lang === "ar" ? "English" : "العربية"}
             </button>
           </div>
@@ -568,7 +583,9 @@ export default function Home() {
 
         <div className="mb-6 bg-white/10 p-4 rounded-3xl border border-white/10">
           <p className="text-xs text-slate-400 mb-1">{t.status}</p>
-          <p className="font-bold">{role === "admin" ? t.admin : t.supervisor}</p>
+          <p className="font-bold">
+            {role === "admin" ? t.admin : t.supervisor}
+          </p>
         </div>
 
         <div className="space-y-2 flex-1">
@@ -580,7 +597,10 @@ export default function Home() {
           <SideButton active={activePage === "reports"} onClick={() => openPage("reports")} icon={<BarChart3 size={20} />}>{t.reports}</SideButton>
         </div>
 
-        <button onClick={logout} className="mt-6 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white p-3 rounded-2xl font-bold">
+        <button
+          onClick={logout}
+          className="mt-6 flex items-center justify-center gap-2 bg-red-600 hover:bg-red-700 text-white p-3 rounded-2xl font-bold"
+        >
           <LogOut size={18} />
           {t.logout}
         </button>
@@ -591,21 +611,32 @@ export default function Home() {
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-5">
             <div>
               <h2 className="text-3xl lg:text-5xl font-black">{t.title}</h2>
-              <p className={darkMode ? "text-slate-400 mt-2" : "text-slate-500 mt-2"}>{t.subtitle}</p>
+              <p className={darkMode ? "text-slate-400 mt-2" : "text-slate-500 mt-2"}>
+                {t.subtitle}
+              </p>
             </div>
 
             <div className="flex flex-wrap gap-3">
-              <button onClick={() => setDarkMode(!darkMode)} className="bg-teal-500 text-black px-5 py-3 rounded-2xl font-bold flex items-center gap-2">
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className="bg-teal-500 text-black px-5 py-3 rounded-2xl font-bold flex items-center gap-2"
+              >
                 {darkMode ? <Sun size={18} /> : <Moon size={18} />}
                 {darkMode ? t.light : t.dark}
               </button>
 
-              <button onClick={() => setLang(lang === "ar" ? "en" : "ar")} className="bg-slate-950 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2">
+              <button
+                onClick={() => setLang(lang === "ar" ? "en" : "ar")}
+                className="bg-slate-950 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2"
+              >
                 <Languages size={18} />
                 {lang === "ar" ? "English" : "العربية"}
               </button>
 
-              <button onClick={logout} className="bg-red-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 md:hidden">
+              <button
+                onClick={logout}
+                className="bg-red-600 text-white px-5 py-3 rounded-2xl font-bold flex items-center gap-2 md:hidden"
+              >
                 <LogOut size={18} />
                 {t.logout}
               </button>
@@ -622,14 +653,22 @@ export default function Home() {
 
         {activePage === "vehicles" && (
           <>
-            <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} className={`${card} p-5 md:p-6 rounded-[2rem] mb-8`}>
+            <motion.div
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`${card} p-5 md:p-6 rounded-[2rem] mb-8`}
+            >
               <h3 className="text-2xl font-black mb-5 flex items-center gap-2">
                 <Plus />
                 {editingId ? t.editVehicle : t.addVehicle}
               </h3>
 
               <div className="grid md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-                <select value={vehicleType} onChange={(e) => setVehicleType(e.target.value)} className={`border p-3 rounded-2xl outline-none ${input}`}>
+                <select
+                  value={vehicleType}
+                  onChange={(e) => setVehicleType(e.target.value)}
+                  className={`border p-3 rounded-2xl outline-none ${input}`}
+                >
                   <option value="car">{t.car}</option>
                   <option value="motorcycle">{t.motorcycle}</option>
                 </select>
@@ -642,12 +681,18 @@ export default function Home() {
               </div>
 
               <div className="flex gap-3 mt-5">
-                <button onClick={saveVehicle} className="bg-teal-500 text-black px-6 py-3 rounded-2xl font-black">
+                <button
+                  onClick={saveVehicle}
+                  className="bg-teal-500 text-black px-6 py-3 rounded-2xl font-black"
+                >
                   {editingId ? t.saveEdit : t.saveVehicle}
                 </button>
 
                 {editingId && (
-                  <button onClick={resetForm} className="bg-slate-600 text-white px-6 py-3 rounded-2xl font-bold">
+                  <button
+                    onClick={resetForm}
+                    className="bg-slate-600 text-white px-6 py-3 rounded-2xl font-bold"
+                  >
                     {t.cancelEdit}
                   </button>
                 )}
@@ -659,7 +704,12 @@ export default function Home() {
 
               <div className="relative w-full md:w-96">
                 <Search className="absolute top-3.5 right-4 text-slate-400" size={20} />
-                <input placeholder={t.search} value={search} onChange={(e) => setSearch(e.target.value)} className={`border p-3 rounded-2xl w-full outline-none ${input}`} />
+                <input
+                  placeholder={t.search}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className={`border p-3 rounded-2xl w-full outline-none ${input}`}
+                />
               </div>
             </div>
 
@@ -674,12 +724,20 @@ export default function Home() {
                 >
                   <div className="flex items-center justify-between mb-5">
                     <div>
-                      <h4 className="text-3xl font-black">{getVehicleValue(vehicle, "plate")}</h4>
-                      <p className="text-slate-500">{getVehicleValue(vehicle, "model")}</p>
+                      <h4 className="text-3xl font-black">
+                        {getVehicleValue(vehicle, "plate")}
+                      </h4>
+                      <p className="text-slate-500">
+                        {getVehicleValue(vehicle, "model")}
+                      </p>
                     </div>
 
                     <div className="w-16 h-16 rounded-3xl bg-teal-500/20 text-teal-500 flex items-center justify-center">
-                      {getVehicleValue(vehicle, "type") === "motorcycle" ? <Bike size={34} /> : <Car size={34} />}
+                      {getVehicleValue(vehicle, "type") === "motorcycle" ? (
+                        <Bike size={34} />
+                      ) : (
+                        <Car size={34} />
+                      )}
                     </div>
                   </div>
 
@@ -691,19 +749,28 @@ export default function Home() {
                   </div>
 
                   <div className={`grid gap-3 mt-6 ${canEditDelete ? "grid-cols-3" : "grid-cols-1"}`}>
-                    <a href={`/cars/${vehicle.id}`} className="bg-slate-950 text-white p-3 rounded-2xl text-center flex items-center justify-center gap-2">
+                    <a
+                      href={`/cars/${vehicle.id}`}
+                      className="bg-slate-950 text-white p-3 rounded-2xl text-center flex items-center justify-center gap-2"
+                    >
                       <Eye size={16} />
                       {t.details}
                     </a>
 
                     {canEditDelete && (
                       <>
-                        <button onClick={() => startEditVehicle(vehicle)} className="bg-teal-500 text-black p-3 rounded-2xl font-bold flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => startEditVehicle(vehicle)}
+                          className="bg-teal-500 text-black p-3 rounded-2xl font-bold flex items-center justify-center gap-2"
+                        >
                           <Pencil size={16} />
                           {t.edit}
                         </button>
 
-                        <button onClick={() => deleteVehicle(vehicle.id)} className="bg-red-600 text-white p-3 rounded-2xl font-bold flex items-center justify-center gap-2">
+                        <button
+                          onClick={() => deleteVehicle(vehicle.id)}
+                          className="bg-red-600 text-white p-3 rounded-2xl font-bold flex items-center justify-center gap-2"
+                        >
                           <Trash2 size={16} />
                           {t.delete}
                         </button>
@@ -730,7 +797,7 @@ export default function Home() {
                 return (
                   <tr key={r.id} className="border-b border-slate-700/30 hover:bg-teal-500/10">
                     <td className="p-4">{index + 1}</td>
-                    <td className="p-4">{getVehicleValue(v || {}, "plate") || "-"}</td>
+                    <td className="p-4">{getVehicleValue(v, "plate") || "-"}</td>
                     <td className="p-4">{r.type === "oil_change" ? t.oilChange : t.consumablePart}</td>
                     <td className="p-4">{r.service_date}</td>
                     <td className="p-4">{r.odometer_km || "-"}</td>
@@ -757,7 +824,7 @@ export default function Home() {
                 return (
                   <tr key={r.id} className="border-b border-slate-700/30 hover:bg-teal-500/10">
                     <td className="p-4">{index + 1}</td>
-                    <td className="p-4">{getVehicleValue(v || {}, "plate") || "-"}</td>
+                    <td className="p-4">{getVehicleValue(v, "plate") || "-"}</td>
                     <td className="p-4">{r.breakdown_date}</td>
                     <td className="p-4">{r.description}</td>
                     <td className="p-4">{r.cost} SAR</td>
@@ -784,7 +851,7 @@ export default function Home() {
                 return (
                   <tr key={r.id} className="border-b border-slate-700/30 hover:bg-teal-500/10">
                     <td className="p-4">{index + 1}</td>
-                    <td className="p-4">{getVehicleValue(v || {}, "plate") || "-"}</td>
+                    <td className="p-4">{getVehicleValue(v, "plate") || "-"}</td>
                     <td className="p-4">{r.driver_name || "-"}</td>
                     <td className="p-4">{r.accident_date}</td>
                     <td className="p-4">{r.driver_fault_percent}%</td>
@@ -817,7 +884,7 @@ export default function Home() {
                 return (
                   <tr key={r.id} className="border-b border-slate-700/30 hover:bg-teal-500/10">
                     <td className="p-4">{index + 1}</td>
-                    <td className="p-4">{getVehicleValue(v || {}, "plate") || "-"}</td>
+                    <td className="p-4">{getVehicleValue(v, "plate") || "-"}</td>
                     <td className="p-4">{r.driver_name}</td>
                     <td className="p-4">{r.driver_type === "primary" ? t.primary : t.additional}</td>
                     <td className="p-4">{r.shift_time || "-"}</td>
@@ -859,7 +926,9 @@ function SideButton({ active, onClick, children, icon }: any) {
     <button
       onClick={onClick}
       className={`w-full flex items-center gap-3 p-3 rounded-2xl transition ${
-        active ? "bg-teal-500 text-black font-black shadow-lg shadow-teal-500/30" : "hover:bg-white/10 text-slate-300"
+        active
+          ? "bg-teal-500 text-black font-black shadow-lg shadow-teal-500/30"
+          : "hover:bg-white/10 text-slate-300"
       }`}
     >
       {icon}
