@@ -1,26 +1,73 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+html,
+body {
+  margin: 0;
+  padding: 0;
+  direction: rtl;
+  background: #f6f8fb;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* {
+  box-sizing: border-box;
 }
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+.input {
+  @apply w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-sky-500 focus:ring-4 focus:ring-sky-100;
 }
+/* =========================
+   GLOBAL FONT IMPROVEMENTS
+========================= */
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-size: 18px;
+}
+
+input,
+select,
+textarea,
+button {
+  font-size: 18px !important;
+  font-weight: 700;
+}
+
+label {
+  font-size: 17px !important;
+  font-weight: 800;
+}
+
+table {
+  font-size: 17px;
+}
+
+.text-xs {
+  font-size: 15px !important;
+}
+
+.text-sm {
+  font-size: 17px !important;
+}
+
+.text-base {
+  font-size: 18px !important;
+}
+
+.text-lg {
+  font-size: 21px !important;
+}
+
+.text-xl {
+  font-size: 24px !important;
+}
+
+.text-2xl {
+  font-size: 30px !important;
+}
+
+.text-3xl {
+  font-size: 38px !important;
+}
+
+.text-4xl {
+  font-size: 46px !important;
 }

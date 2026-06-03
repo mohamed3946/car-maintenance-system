@@ -1,721 +1,597 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { useParams } from "next/navigation"
-import { supabase } from "../../lib/supabase"
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import AppLayout, { useLanguage } from "@/components/AppLayout";
+import { supabase } from "@/app/lib/supabase";
+import {
+  ArrowRight,
+  Ban,
+  CalendarDays,
+  Car,
+  Droplets,
+  Fuel,
+  Gauge,
+  MapPin,
+  Pencil,
+  Phone,
+  Save,
+  Shield,
+  Trash2,
+  User,
+  Wrench,
+  AlertTriangle,
+  CheckCircle,
+} from "lucide-react";
 
-export default function VehicleDetails() {
-  const params = useParams()
-  const id = params.id as string
+type Vehicle = {
+  id: string;
+  vehicle_type: string | null;
+  serial_number: string | null;
+  plate_number: string | null;
+  city: string | null;
+  vehicle_model: string | null;
+  manufacturing_year: string | null;
+  odometer: string | null;
+  vehicle_status: string | null;
+  color: string | null;
+  insurance_company: string | null;
+  insurance_expiry: string | null;
+  gps_enabled: boolean | null;
+  fuel_sim_enabled: boolean | null;
+  notes: string | null;
+  main_driver_name: string | null;
+  main_driver_identity: string | null;
+  main_driver_phone: string | null;
+  second_driver_name: string | null;
+  second_driver_identity: string | null;
+  second_driver_phone: string | null;
+};
 
-  const [lang, setLang] = useState<"ar" | "en">("ar")
-  const [role, setRole] = useState("supervisor")
-  const [vehicle, setVehicle] = useState<any>(null)
-  const [loading, setLoading] = useState(true)
-  const [activeSection, setActiveSection] = useState("maintenance")
-  const [previewImage, setPreviewImage] = useState("")
+export default function VehicleDetailsPage() {
+  return (
+    <AppLayout titleKey="vehicles" subtitleKey="vehiclesSubtitle">
+      <VehicleDetailsContent />
+    </AppLayout>
+  );
+}
 
-  const [maintenanceRecords, setMaintenanceRecords] = useState<any[]>([])
-  const [maintenanceType, setMaintenanceType] = useState("oil_change")
-  const [maintenanceDate, setMaintenanceDate] = useState("")
-  const [maintenanceKm, setMaintenanceKm] = useState("")
-  const [maintenanceDesc, setMaintenanceDesc] = useState("")
-  const [maintenanceCost, setMaintenanceCost] = useState("")
-  const [oilFilterChanged, setOilFilterChanged] = useState("no")
-  const [maintenanceFilter, setMaintenanceFilter] = useState("all")
+function VehicleDetailsContent() {
+  const { lang } = useLanguage();
+  const ar = lang === "ar";
+  const params = useParams();
+  const router = useRouter();
 
-  const [breakdownRecords, setBreakdownRecords] = useState<any[]>([])
-  const [breakdownDate, setBreakdownDate] = useState("")
-  const [breakdownDesc, setBreakdownDesc] = useState("")
-  const [breakdownCost, setBreakdownCost] = useState("")
+  const vehicleId = String(params.id);
 
-  const [accidentRecords, setAccidentRecords] = useState<any[]>([])
-  const [accidentDate, setAccidentDate] = useState("")
-  const [accidentDriver, setAccidentDriver] = useState("")
-  const [accidentDesc, setAccidentDesc] = useState("")
-  const [faultPercent, setFaultPercent] = useState("")
-  const [accidentCost, setAccidentCost] = useState("")
-  const [accidentFile, setAccidentFile] = useState<File | null>(null)
-
-  const [drivers, setDrivers] = useState<any[]>([])
-  const [driverAction, setDriverAction] = useState("change")
-  const [newDriverName, setNewDriverName] = useState("")
-  const [driverStartDate, setDriverStartDate] = useState("")
-  const [shiftTime, setShiftTime] = useState("")
-
-  const canEditDelete = role === "admin"
-
-  const t = {
-    ar: {
-      back: "رجوع",
-      details: "تفاصيل المركبة",
-      type: "النوع",
-      car: "سيارة",
-      motorcycle: "دراجة نارية",
-      plate: "رقم اللوحة",
-      model: "الموديل",
-      color: "اللون",
-      driver: "السائق",
-      odometer: "العداد",
-      maintenance: "الصيانة",
-      breakdowns: "الأعطال",
-      accidents: "الحوادث",
-      drivers: "السائقين",
-      oilChange: "تغيير زيت",
-      consumablePart: "قطع مستهلكة",
-      date: "التاريخ",
-      filterChanged: "تم تغيير الفلتر",
-      filterNotChanged: "لم يتم تغيير الفلتر",
-      partName: "اسم القطعة / الوصف",
-      cost: "التكلفة",
-      save: "حفظ",
-      all: "الكل",
-      delete: "حذف",
-      breakdownDesc: "وصف العطل",
-      accidentDesc: "وصف الحادث",
-      selectDriver: "اختر السائق",
-      faultPercent: "نسبة الخطأ",
-      accidentImage: "رفع / التقاط صورة الحادث",
-      changeMainDriver: "تغيير السائق الأساسي",
-      addExtraDriver: "إضافة سائق إضافي",
-      driverName: "اسم السائق",
-      startDate: "تاريخ البداية",
-      shiftOptional: "موعد الوردية اختياري",
-      primary: "أساسي",
-      additional: "إضافي",
-      active: "نشط",
-      inactive: "غير نشط",
-      role: "الصلاحية",
-      admin: "مدير",
-      supervisor: "مشرف",
-      loading: "جاري التحميل...",
-      notFound: "المركبة غير موجودة",
-      confirmDelete: "هل تريد حذف هذا السجل؟",
-      imagePreview: "معاينة الصورة",
-    },
-    en: {
-      back: "Back",
-      details: "Vehicle Details",
-      type: "Type",
-      car: "Car",
-      motorcycle: "Motorcycle",
-      plate: "Plate Number",
-      model: "Model",
-      color: "Color",
-      driver: "Driver",
-      odometer: "Odometer",
-      maintenance: "Maintenance",
-      breakdowns: "Breakdowns",
-      accidents: "Accidents",
-      drivers: "Drivers",
-      oilChange: "Oil Change",
-      consumablePart: "Consumable Part",
-      date: "Date",
-      filterChanged: "Filter Changed",
-      filterNotChanged: "Filter Not Changed",
-      partName: "Part name / description",
-      cost: "Cost",
-      save: "Save",
-      all: "All",
-      delete: "Delete",
-      breakdownDesc: "Breakdown description",
-      accidentDesc: "Accident description",
-      selectDriver: "Select Driver",
-      faultPercent: "Fault Percent",
-      accidentImage: "Upload / Take accident photo",
-      changeMainDriver: "Change Main Driver",
-      addExtraDriver: "Add Extra Driver",
-      driverName: "Driver Name",
-      startDate: "Start Date",
-      shiftOptional: "Shift time optional",
-      primary: "Primary",
-      additional: "Additional",
-      active: "Active",
-      inactive: "Inactive",
-      role: "Role",
-      admin: "Admin",
-      supervisor: "Supervisor",
-      loading: "Loading...",
-      notFound: "Vehicle not found",
-      confirmDelete: "Delete this record?",
-      imagePreview: "Image Preview",
-    },
-  }[lang]
-
-  const fetchRole = async () => {
-    const { data: sessionData } = await supabase.auth.getSession()
-    const userId = sessionData.session?.user?.id
-    if (!userId) return
-
-    const { data } = await supabase
-      .from("user_profiles")
-      .select("role")
-      .eq("id", userId)
-      .single()
-
-    setRole(data?.role || "supervisor")
-  }
-
-  const fetchVehicle = async () => {
-    const { data } = await supabase
-      .from("cars")
-      .select("*")
-      .eq("id", id)
-      .single()
-
-    setVehicle(data)
-    setLoading(false)
-  }
-
-  const fetchMaintenance = async () => {
-    const { data } = await supabase
-      .from("maintenance_records")
-      .select("*")
-      .eq("car_id", id)
-      .order("service_date", { ascending: false })
-
-    setMaintenanceRecords(data || [])
-  }
-
-  const fetchBreakdowns = async () => {
-    const { data } = await supabase
-      .from("breakdown_records")
-      .select("*")
-      .eq("car_id", id)
-      .order("breakdown_date", { ascending: false })
-
-    setBreakdownRecords(data || [])
-  }
-
-  const fetchAccidents = async () => {
-    const { data } = await supabase
-      .from("accident_records")
-      .select("*")
-      .eq("car_id", id)
-      .order("accident_date", { ascending: false })
-
-    setAccidentRecords(data || [])
-  }
-
-  const fetchDrivers = async () => {
-    const { data } = await supabase
-      .from("car_drivers")
-      .select("*")
-      .eq("car_id", id)
-      .order("id", { ascending: false })
-
-    setDrivers(data || [])
-  }
+  const [vehicle, setVehicle] = useState<Vehicle | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
-    if (id) {
-      fetchRole()
-      fetchVehicle()
-      fetchMaintenance()
-      fetchBreakdowns()
-      fetchAccidents()
-      fetchDrivers()
-    }
-  }, [id])
+    fetchVehicle();
+  }, [vehicleId]);
 
-  const deleteRecord = async (table: string, recordId: number) => {
-    if (!canEditDelete) return
-    if (!confirm(t.confirmDelete)) return
+  async function fetchVehicle() {
+    setLoading(true);
 
-    await supabase.from(table).delete().eq("id", recordId)
-
-    fetchMaintenance()
-    fetchBreakdowns()
-    fetchAccidents()
-    fetchDrivers()
-  }
-
-  const addMaintenance = async () => {
-    if (!maintenanceDate) return
-    if (maintenanceType === "oil_change" && !maintenanceKm) return
-
-    await supabase.from("maintenance_records").insert([
-      {
-        car_id: id,
-        type: maintenanceType,
-        service_date: maintenanceDate,
-        odometer_km:
-          maintenanceType === "oil_change" ? Number(maintenanceKm) : null,
-        description:
-          maintenanceType === "consumable_part" ? maintenanceDesc : "",
-        cost:
-          maintenanceType === "consumable_part"
-            ? Number(maintenanceCost || 0)
-            : 0,
-        oil_filter_changed:
-          maintenanceType === "oil_change" && oilFilterChanged === "yes",
-      },
-    ])
-
-    if (maintenanceType === "oil_change") {
-      await supabase
-        .from("cars")
-        .update({ current_km: Number(maintenanceKm) })
-        .eq("id", id)
-
-      fetchVehicle()
-    }
-
-    setMaintenanceDate("")
-    setMaintenanceKm("")
-    setMaintenanceDesc("")
-    setMaintenanceCost("")
-    setOilFilterChanged("no")
-    fetchMaintenance()
-  }
-
-  const addBreakdown = async () => {
-    if (!breakdownDate || !breakdownDesc) return
-
-    await supabase.from("breakdown_records").insert([
-      {
-        car_id: id,
-        breakdown_date: breakdownDate,
-        description: breakdownDesc,
-        cost: Number(breakdownCost || 0),
-      },
-    ])
-
-    setBreakdownDate("")
-    setBreakdownDesc("")
-    setBreakdownCost("")
-    fetchBreakdowns()
-  }
-
-  const uploadAccidentImage = async () => {
-    if (!accidentFile) return ""
-
-    const fileExt = accidentFile.name.split(".").pop()
-    const fileName = `${id}-${Date.now()}.${fileExt}`
-    const filePath = `accidents/${fileName}`
-
-    const { error } = await supabase.storage
-      .from("accidents")
-      .upload(filePath, accidentFile)
+    const { data, error } = await supabase
+      .from("vehicles")
+      .select("*")
+      .eq("id", vehicleId)
+      .single();
 
     if (error) {
-      console.log(error)
-      alert("Image upload failed")
-      return ""
+      console.log(error);
+      setVehicle(null);
+      setLoading(false);
+      return;
     }
 
-    const { data } = supabase.storage
-      .from("accidents")
-      .getPublicUrl(filePath)
-
-    return data.publicUrl
+    setVehicle(data);
+    setLoading(false);
   }
 
-  const addAccident = async () => {
-    if (!accidentDate || !accidentDriver) return
+  async function stopVehicle() {
+    const ok = confirm(ar ? "هل تريد إيقاف المركبة؟" : "Stop this vehicle?");
+    if (!ok) return;
 
-    const imageUrl = await uploadAccidentImage()
+    setActionLoading(true);
 
-    await supabase.from("accident_records").insert([
-      {
-        car_id: id,
-        accident_date: accidentDate,
-        driver_name: accidentDriver,
-        description: accidentDesc,
-        driver_fault_percent: Number(faultPercent || 0),
-        cost: Number(accidentCost || 0),
-        image_url: imageUrl,
-      },
-    ])
+    const { error } = await supabase
+      .from("vehicles")
+      .update({ vehicle_status: ar ? "متوقف" : "Stopped" })
+      .eq("id", vehicleId);
 
-    setAccidentDate("")
-    setAccidentDriver("")
-    setAccidentDesc("")
-    setFaultPercent("")
-    setAccidentCost("")
-    setAccidentFile(null)
-    fetchAccidents()
-  }
+    setActionLoading(false);
 
-  const saveDriver = async () => {
-    if (!newDriverName) return
-
-    const startDate = driverStartDate || new Date().toISOString().slice(0, 10)
-
-    if (driverAction === "change") {
-      await supabase
-        .from("car_drivers")
-        .update({ active: false, end_date: startDate })
-        .eq("car_id", id)
-        .eq("driver_type", "primary")
-        .eq("active", true)
-
-      await supabase.from("car_drivers").insert([
-        {
-          car_id: id,
-          driver_name: newDriverName,
-          driver_type: "primary",
-          active: true,
-          start_date: startDate,
-          shift_time: shiftTime || null,
-        },
-      ])
-
-      await supabase
-        .from("cars")
-        .update({ driver_name: newDriverName })
-        .eq("id", id)
-
-      fetchVehicle()
-    } else {
-      await supabase.from("car_drivers").insert([
-        {
-          car_id: id,
-          driver_name: newDriverName,
-          driver_type: "additional",
-          active: true,
-          start_date: startDate,
-          shift_time: shiftTime || null,
-        },
-      ])
+    if (error) {
+      console.log(error);
+      alert(ar ? "حدث خطأ أثناء إيقاف المركبة" : "Error stopping vehicle");
+      return;
     }
 
-    setNewDriverName("")
-    setDriverStartDate("")
-    setShiftTime("")
-    setDriverAction("change")
-    fetchDrivers()
+    await fetchVehicle();
+  }
+  async function activateVehicle() {
+  const ok = confirm(ar ? "هل تريد إعادة تشغيل المركبة؟" : "Activate this vehicle?");
+  if (!ok) return;
+
+  setActionLoading(true);
+
+  const { error } = await supabase
+    .from("vehicles")
+    .update({
+      vehicle_status: ar ? "متاح" : "Available",
+    })
+    .eq("id", vehicleId);
+
+  setActionLoading(false);
+
+  if (error) {
+    console.log(error);
+    alert(ar ? "حدث خطأ أثناء تشغيل المركبة" : "Error activating vehicle");
+    return;
   }
 
-  const filteredMaintenanceRecords = maintenanceRecords.filter((record) => {
-    if (maintenanceFilter === "all") return true
-    return record.type === maintenanceFilter
-  })
+  await fetchVehicle();
+}
 
-  if (loading) return <div className="p-10">{t.loading}</div>
-  if (!vehicle) return <div className="p-10">{t.notFound}</div>
+  async function deleteVehicle() {
+    const ok = confirm(
+      ar ? "هل تريد حذف المركبة نهائيًا؟" : "Delete this vehicle permanently?"
+    );
+    if (!ok) return;
+
+    setActionLoading(true);
+
+    const { error } = await supabase.from("vehicles").delete().eq("id", vehicleId);
+
+    setActionLoading(false);
+
+    if (error) {
+      console.log(error);
+      alert(ar ? "حدث خطأ أثناء حذف المركبة" : "Error deleting vehicle");
+      return;
+    }
+
+    router.push("/cars");
+  }
+
+  if (loading) {
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center font-bold text-slate-500 shadow-sm">
+        {ar ? "جاري تحميل بيانات المركبة..." : "Loading vehicle details..."}
+      </div>
+    );
+  }
+
+  if (!vehicle) {
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-white p-10 text-center shadow-sm">
+        <h2 className="text-2xl font-extrabold">
+          {ar ? "لم يتم العثور على المركبة" : "Vehicle not found"}
+        </h2>
+
+        <Link
+          href="/cars"
+          className="mt-5 inline-flex rounded-xl bg-blue-600 px-6 py-3 font-bold text-white"
+        >
+          {ar ? "العودة للمركبات" : "Back to Vehicles"}
+        </Link>
+      </div>
+    );
+  }
+
+  const isBike = vehicle.vehicle_type === "bike";
+  const vehicleImage = isBike ? "/bike.png" : "/car.png";
+
+  const vehicleTypeText = isBike
+    ? ar
+      ? "دراجة نارية"
+      : "Motorcycle"
+    : ar
+    ? "سيارة"
+    : "Car";
 
   return (
-    <main
-      className="min-h-screen bg-gray-100 p-4 md:p-8"
-      dir={lang === "ar" ? "rtl" : "ltr"}
-    >
-      <div className="bg-white p-5 md:p-8 rounded-3xl shadow">
-        <div className="flex justify-between mb-6">
-          <a href="/" className="bg-gray-700 text-white px-4 py-2 rounded-xl">
-            {t.back}
-          </a>
+    <>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-bold text-blue-600">
+            {ar
+              ? "لوحة التحكم / المركبات / تفاصيل المركبة"
+              : "Dashboard / Vehicles / Vehicle Details"}
+          </p>
+
+          <h1 className="mt-2 text-3xl font-extrabold">
+            {ar ? "تفاصيل المركبة" : "Vehicle Details"}
+          </h1>
+
+          <p className="mt-1 text-sm text-slate-500">
+            {ar
+              ? "عرض وإدارة بيانات المركبة وسجلها"
+              : "View and manage vehicle information"}
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-3">
+          <Link
+            href="/cars"
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-bold hover:bg-slate-50"
+          >
+            <ArrowRight className="h-5 w-5" />
+            {ar ? "العودة للمركبات" : "Back"}
+          </Link>
+
+          <Link
+            href={`/cars/${vehicle.id}/edit`}
+            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-3 font-bold hover:bg-slate-50"
+          >
+            <Pencil className="h-5 w-5" />
+            {ar ? "تعديل" : "Edit"}
+          </Link>
+
+          {vehicle.vehicle_status === "متوقف" || vehicle.vehicle_status === "Stopped" ? (
+  <button
+    onClick={activateVehicle}
+    disabled={actionLoading}
+    className="flex items-center gap-2 rounded-xl border border-green-300 bg-green-50 px-5 py-3 font-bold text-green-700 disabled:opacity-60"
+  >
+    <CheckCircle className="h-5 w-5" />
+    {ar ? "تشغيل المركبة" : "Activate Vehicle"}
+  </button>
+) : (
+  <button
+    onClick={stopVehicle}
+    disabled={actionLoading}
+    className="flex items-center gap-2 rounded-xl border border-orange-300 bg-orange-50 px-5 py-3 font-bold text-orange-700 disabled:opacity-60"
+  >
+    <Ban className="h-5 w-5" />
+    {ar ? "إيقاف المركبة" : "Stop Vehicle"}
+  </button>
+)}
 
           <button
-            onClick={() => setLang(lang === "ar" ? "en" : "ar")}
-            className="bg-black text-white px-4 py-2 rounded-xl"
+            onClick={deleteVehicle}
+            disabled={actionLoading}
+            className="flex items-center gap-2 rounded-xl border border-red-300 bg-red-50 px-5 py-3 font-bold text-red-700 disabled:opacity-60"
           >
-            {lang === "ar" ? "English" : "العربية"}
+            <Trash2 className="h-5 w-5" />
+            {ar ? "حذف المركبة" : "Delete"}
           </button>
         </div>
+      </div>
 
-        <div className="mb-4 bg-gray-100 p-4 rounded-2xl">
-          <strong>{t.role}: </strong>
-          {role === "admin" ? t.admin : t.supervisor}
-        </div>
+      <section className="grid grid-cols-1 gap-6 xl:grid-cols-[330px_1fr_390px]">
+        <div className="space-y-5">
+          <Card title={ar ? "قائد المركبة الحالي" : "Current Driver"} icon={<User />}>
+            <div className="text-center">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-slate-100">
+                <User className="h-8 w-8" />
+              </div>
 
-        <h1 className="text-3xl md:text-4xl font-bold mb-8">
-          {vehicle.vehicle_type === "motorcycle" ? "🏍️" : "🚗"} {t.details}
-        </h1>
+              <h3 className="mt-3 text-lg font-extrabold">
+                {vehicle.main_driver_name || "-"}
+              </h3>
 
-        <div className="grid md:grid-cols-3 xl:grid-cols-6 gap-4 mb-8">
-          <Info title={t.type} value={vehicle.vehicle_type === "motorcycle" ? t.motorcycle : t.car} />
-          <Info title={t.plate} value={vehicle.plate_number} />
-          <Info title={t.model} value={vehicle.car_model} />
-          <Info title={t.color} value={vehicle.color} />
-          <Info title={t.driver} value={vehicle.driver_name} />
-          <Info title={t.odometer} value={`${vehicle.current_km} KM`} />
-        </div>
+              <p className="mt-1 text-sm text-slate-500">
+                {vehicle.main_driver_phone || "-"}
+              </p>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <TabButton active={activeSection === "maintenance"} onClick={() => setActiveSection("maintenance")}>🔧 {t.maintenance}</TabButton>
-          <TabButton active={activeSection === "breakdowns"} onClick={() => setActiveSection("breakdowns")}>⚠️ {t.breakdowns}</TabButton>
-          <TabButton active={activeSection === "accidents"} onClick={() => setActiveSection("accidents")}>🚨 {t.accidents}</TabButton>
-          <TabButton active={activeSection === "drivers"} onClick={() => setActiveSection("drivers")}>👨‍🔧 {t.drivers}</TabButton>
-        </div>
+              <p className="mt-1 text-xs text-slate-400">
+                {vehicle.main_driver_identity || ""}
+              </p>
 
-        {activeSection === "maintenance" && (
-          <section className="border p-5 rounded-2xl">
-            <h3 className="text-2xl font-bold mb-5">{t.maintenance}</h3>
+              <div className="mt-5 grid grid-cols-1 gap-3">
+                <Link
+                  href={`/cars/${vehicle.id}/edit`}
+                  className="flex items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-white py-3 font-bold text-blue-700 hover:bg-blue-50"
+                >
+                  <ArrowRight className="h-5 w-5" />
+                  {ar ? "تغيير قائد المركبة" : "Change Driver"}
+                </Link>
 
-            <div className="grid md:grid-cols-4 gap-3 mb-6">
-              <select value={maintenanceType} onChange={(e) => setMaintenanceType(e.target.value)} className="border p-3 rounded-xl">
-                <option value="oil_change">{t.oilChange}</option>
-                <option value="consumable_part">{t.consumablePart}</option>
-              </select>
-
-              <input type="date" value={maintenanceDate} onChange={(e) => setMaintenanceDate(e.target.value)} className="border p-3 rounded-xl" />
-
-              {maintenanceType === "oil_change" && (
-                <>
-                  <input type="number" placeholder={t.odometer} value={maintenanceKm} onChange={(e) => setMaintenanceKm(e.target.value)} className="border p-3 rounded-xl" />
-                  <select value={oilFilterChanged} onChange={(e) => setOilFilterChanged(e.target.value)} className="border p-3 rounded-xl">
-                    <option value="no">{t.filterNotChanged}</option>
-                    <option value="yes">{t.filterChanged}</option>
-                  </select>
-                </>
-              )}
-
-              {maintenanceType === "consumable_part" && (
-                <>
-                  <input placeholder={t.partName} value={maintenanceDesc} onChange={(e) => setMaintenanceDesc(e.target.value)} className="border p-3 rounded-xl" />
-                  <input type="number" placeholder={t.cost} value={maintenanceCost} onChange={(e) => setMaintenanceCost(e.target.value)} className="border p-3 rounded-xl" />
-                </>
-              )}
-            </div>
-
-            <button onClick={addMaintenance} className="bg-green-600 text-white px-6 py-3 rounded-xl mb-6">
-              {t.save}
-            </button>
-
-            <select value={maintenanceFilter} onChange={(e) => setMaintenanceFilter(e.target.value)} className="border p-3 rounded-xl mb-4">
-              <option value="all">{t.all}</option>
-              <option value="oil_change">{t.oilChange}</option>
-              <option value="consumable_part">{t.consumablePart}</option>
-            </select>
-
-            <Timeline>
-              {filteredMaintenanceRecords.map((record) => (
-                <TimelineItem key={record.id} title={record.type === "oil_change" ? t.oilChange : t.consumablePart} date={record.service_date}>
-                  {record.type === "oil_change" && (
-                    <>
-                      <p><strong>{t.odometer}:</strong> {record.odometer_km} KM</p>
-                      <p><strong>{record.oil_filter_changed ? t.filterChanged : t.filterNotChanged}</strong></p>
-                    </>
-                  )}
-
-                  {record.type === "consumable_part" && (
-                    <>
-                      <p><strong>{t.partName}:</strong> {record.description}</p>
-                      <p><strong>{t.cost}:</strong> {record.cost}</p>
-                    </>
-                  )}
-
-                  {canEditDelete && (
-                    <button onClick={() => deleteRecord("maintenance_records", record.id)} className="bg-red-600 text-white px-3 py-2 rounded-xl mt-3">
-                      {t.delete}
-                    </button>
-                  )}
-                </TimelineItem>
-              ))}
-            </Timeline>
-          </section>
-        )}
-
-        {activeSection === "breakdowns" && (
-          <section className="border p-5 rounded-2xl">
-            <h3 className="text-2xl font-bold mb-5">{t.breakdowns}</h3>
-
-            <div className="grid md:grid-cols-3 gap-3 mb-6">
-              <input type="date" value={breakdownDate} onChange={(e) => setBreakdownDate(e.target.value)} className="border p-3 rounded-xl" />
-              <input placeholder={t.breakdownDesc} value={breakdownDesc} onChange={(e) => setBreakdownDesc(e.target.value)} className="border p-3 rounded-xl" />
-              <input type="number" placeholder={t.cost} value={breakdownCost} onChange={(e) => setBreakdownCost(e.target.value)} className="border p-3 rounded-xl" />
-            </div>
-
-            <button onClick={addBreakdown} className="bg-green-600 text-white px-6 py-3 rounded-xl mb-6">
-              {t.save}
-            </button>
-
-            <Timeline>
-              {breakdownRecords.map((record) => (
-                <TimelineItem key={record.id} title={t.breakdowns} date={record.breakdown_date}>
-                  <p><strong>{t.breakdownDesc}:</strong> {record.description}</p>
-                  <p><strong>{t.cost}:</strong> {record.cost}</p>
-
-                  {canEditDelete && (
-                    <button onClick={() => deleteRecord("breakdown_records", record.id)} className="bg-red-600 text-white px-3 py-2 rounded-xl mt-3">
-                      {t.delete}
-                    </button>
-                  )}
-                </TimelineItem>
-              ))}
-            </Timeline>
-          </section>
-        )}
-
-        {activeSection === "accidents" && (
-          <section className="border p-5 rounded-2xl">
-            <h3 className="text-2xl font-bold mb-5">{t.accidents}</h3>
-
-            <div className="grid md:grid-cols-3 gap-3 mb-6">
-              <input type="date" value={accidentDate} onChange={(e) => setAccidentDate(e.target.value)} className="border p-3 rounded-xl" />
-
-              <select value={accidentDriver} onChange={(e) => setAccidentDriver(e.target.value)} className="border p-3 rounded-xl">
-                <option value="">{t.selectDriver}</option>
-                {drivers.map((driver) => (
-                  <option key={driver.id} value={driver.driver_name}>
-                    {driver.driver_name}
-                  </option>
-                ))}
-              </select>
-
-              <input placeholder={t.accidentDesc} value={accidentDesc} onChange={(e) => setAccidentDesc(e.target.value)} className="border p-3 rounded-xl" />
-              <input type="number" placeholder={t.faultPercent} value={faultPercent} onChange={(e) => setFaultPercent(e.target.value)} className="border p-3 rounded-xl" />
-              <input type="number" placeholder={t.cost} value={accidentCost} onChange={(e) => setAccidentCost(e.target.value)} className="border p-3 rounded-xl" />
-
-              <div className="border rounded-xl p-4 bg-white">
-                <label className="cursor-pointer flex items-center justify-center gap-2 bg-black text-white p-3 rounded-xl hover:bg-gray-800 transition">
-                  📷 {t.accidentImage}
-
-                  <input
-                    type="file"
-                    accept="image/*"
-                    capture="environment"
-                    hidden
-                    onChange={(e) => setAccidentFile(e.target.files?.[0] || null)}
-                  />
-                </label>
-
-                {accidentFile && (
-                  <div className="mt-4">
-                    <img
-                      src={URL.createObjectURL(accidentFile)}
-                      alt="preview"
-                      className="w-48 rounded-xl border"
-                    />
-
-                    <p className="text-sm text-gray-500 mt-2">
-                      {accidentFile.name}
-                    </p>
-                  </div>
-                )}
+                <Link
+                  href={`/cars/${vehicle.id}/edit`}
+                  className="flex items-center justify-center gap-2 rounded-2xl bg-blue-600 py-3 font-bold text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700"
+                >
+                  <User className="h-5 w-5" />
+                  {ar ? "إضافة قائد إضافي" : "Add Extra Driver"}
+                </Link>
               </div>
             </div>
+          </Card>
 
-            <button onClick={addAccident} className="bg-green-600 text-white px-6 py-3 rounded-xl mb-6">
-              {t.save}
-            </button>
+          {vehicle.second_driver_name && (
+            <Card title={ar ? "السائق الإضافي" : "Extra Driver"} icon={<User />}>
+              <InfoRow label={ar ? "الاسم" : "Name"} value={vehicle.second_driver_name} />
+              <InfoRow
+                label={ar ? "الهوية / الإقامة" : "ID / Iqama"}
+                value={vehicle.second_driver_identity || "-"}
+              />
+              <InfoRow label={ar ? "الجوال" : "Phone"} value={vehicle.second_driver_phone || "-"} />
+            </Card>
+          )}
 
-            <Timeline>
-              {accidentRecords.map((record) => (
-                <TimelineItem key={record.id} title={t.accidents} date={record.accident_date}>
-                  <p><strong>{t.driver}:</strong> {record.driver_name}</p>
-                  <p><strong>{t.accidentDesc}:</strong> {record.description}</p>
-                  <p><strong>{t.faultPercent}:</strong> {record.driver_fault_percent}%</p>
-                  <p><strong>{t.cost}:</strong> {record.cost}</p>
+          <Card title={ar ? "حالة المركبة" : "Vehicle Status"} icon={<CheckCircle />}>
+            <InfoRow
+              label={ar ? "الحالة الحالية" : "Current Status"}
+              value={vehicle.vehicle_status || "-"}
+              green
+            />
+            <InfoRow label={ar ? "المدينة" : "City"} value={vehicle.city || "-"} />
+            <InfoRow label={ar ? "اللون" : "Color"} value={vehicle.color || "-"} />
+          </Card>
+        </div>
 
-                  {record.image_url && (
-                    <img
-                      src={record.image_url}
-                      alt="Accident"
-                      onClick={() => setPreviewImage(record.image_url)}
-                      className="w-48 mt-3 rounded-xl border cursor-pointer hover:scale-105 transition"
-                    />
-                  )}
+        <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-6 flex items-center justify-between">
+            <div>
+              <h2 className="text-3xl font-extrabold">
+                {vehicle.vehicle_model || (ar ? "مركبة بدون اسم" : "Unnamed Vehicle")}
+              </h2>
 
-                  {canEditDelete && (
-                    <button onClick={() => deleteRecord("accident_records", record.id)} className="bg-red-600 text-white px-3 py-2 rounded-xl mt-3">
-                      {t.delete}
-                    </button>
-                  )}
-                </TimelineItem>
-              ))}
-            </Timeline>
-          </section>
-        )}
-
-        {activeSection === "drivers" && (
-          <section className="border p-5 rounded-2xl">
-            <h3 className="text-2xl font-bold mb-5">{t.drivers}</h3>
-
-            <div className="grid md:grid-cols-4 gap-3 mb-6">
-              <select value={driverAction} onChange={(e) => setDriverAction(e.target.value)} className="border p-3 rounded-xl">
-                <option value="change">{t.changeMainDriver}</option>
-                <option value="add">{t.addExtraDriver}</option>
-              </select>
-
-              <input placeholder={t.driverName} value={newDriverName} onChange={(e) => setNewDriverName(e.target.value)} className="border p-3 rounded-xl" />
-              <input type="date" value={driverStartDate} onChange={(e) => setDriverStartDate(e.target.value)} className="border p-3 rounded-xl" />
-              <input placeholder={t.shiftOptional} value={shiftTime} onChange={(e) => setShiftTime(e.target.value)} className="border p-3 rounded-xl" />
+              <p className="mt-1 text-sm text-slate-500">
+                {vehicle.serial_number || "-"} • {vehicle.manufacturing_year || "-"}
+              </p>
             </div>
 
-            <button onClick={saveDriver} className="bg-green-600 text-white px-6 py-3 rounded-xl mb-6">
-              {t.save}
-            </button>
+            <span className="rounded-full bg-blue-100 px-4 py-1 text-sm font-bold text-blue-700">
+              {vehicle.manufacturing_year || "-"}
+            </span>
+          </div>
 
-            <Timeline>
-              {drivers.map((driver) => (
-                <TimelineItem key={driver.id} title={driver.driver_name} date={driver.start_date || "-"}>
-                  <p><strong>{t.type}:</strong> {driver.driver_type === "primary" ? t.primary : t.additional}</p>
-                  <p><strong>{t.shiftOptional}:</strong> {driver.shift_time || "-"}</p>
-                  <p><strong>{driver.active ? t.active : t.inactive}</strong></p>
-
-                  {canEditDelete && (
-                    <button onClick={() => deleteRecord("car_drivers", driver.id)} className="bg-red-600 text-white px-3 py-2 rounded-xl mt-3">
-                      {t.delete}
-                    </button>
-                  )}
-                </TimelineItem>
-              ))}
-            </Timeline>
-          </section>
-        )}
-      </div>
-
-      {previewImage && (
-        <div
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4"
-          onClick={() => setPreviewImage("")}
-        >
-          <img
-            src={previewImage}
-            alt={t.imagePreview}
-            className="max-w-full max-h-full rounded-2xl"
-          />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <Info icon={<Car />} label={ar ? "نوع المركبة" : "Vehicle Type"} value={vehicleTypeText} />
+            <Info icon={<Save />} label={ar ? "الرقم التسلسلي" : "Serial Number"} value={vehicle.serial_number || "-"} />
+            <Info icon={<Save />} label={ar ? "رقم اللوحة" : "Plate Number"} value={vehicle.plate_number || "-"} />
+            <Info icon={<MapPin />} label={ar ? "المدينة" : "City"} value={vehicle.city || "-"} />
+            <Info icon={<Gauge />} label={ar ? "العداد الحالي" : "Current Odometer"} value={`${vehicle.odometer || "-"} KM`} />
+            <Info icon={<CalendarDays />} label={ar ? "سنة الصنع" : "Manufacturing Year"} value={vehicle.manufacturing_year || "-"} />
+            <Info icon={<Shield />} label={ar ? "شركة التأمين" : "Insurance Company"} value={vehicle.insurance_company || "-"} />
+            <Info icon={<CalendarDays />} label={ar ? "انتهاء التأمين" : "Insurance Expiry"} value={vehicle.insurance_expiry || "-"} />
+            <Info
+              icon={<MapPin />}
+              label="GPS"
+              value={
+                vehicle.gps_enabled
+                  ? ar
+                    ? "متوفر"
+                    : "Available"
+                  : ar
+                  ? "غير متوفر"
+                  : "Not Available"
+              }
+            />
+            <Info
+              icon={<Fuel />}
+              label={ar ? "شريحة البنزين" : "Fuel SIM"}
+              value={
+                vehicle.fuel_sim_enabled
+                  ? ar
+                    ? "متوفرة"
+                    : "Available"
+                  : ar
+                  ? "غير متوفرة"
+                  : "Not Available"
+              }
+            />
+          </div>
         </div>
-      )}
-    </main>
-  )
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <span className="mb-4 inline-flex rounded-full bg-green-100 px-4 py-1 text-sm font-bold text-green-700">
+            {vehicle.vehicle_status || "-"}
+          </span>
+
+          <div className="flex h-72 items-center justify-center">
+            <Image
+              src={vehicleImage}
+              alt="vehicle"
+              width={360}
+              height={260}
+              className="max-h-72 w-full object-contain"
+              priority
+            />
+          </div>
+        </div>
+      </section>
+
+      <section className="mt-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="mb-5">
+          <h2 className="text-2xl font-extrabold text-slate-800">
+            {ar ? "إجراءات المركبة" : "Vehicle Actions"}
+          </h2>
+
+          <p className="mt-1 text-sm text-slate-500">
+            {ar
+              ? "إدارة الصيانة والزيوت والحوادث الخاصة بالمركبة"
+              : "Manage maintenance, oil changes and accidents"}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <Link
+            href={`/maintenance/add?vehicle=${vehicle.id}`}
+            className="group rounded-2xl border border-blue-100 bg-blue-50 p-5 transition-all hover:-translate-y-1 hover:border-blue-200 hover:bg-blue-100"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+                <Wrench className="h-8 w-8" />
+              </div>
+
+              <div className="text-right">
+                <h3 className="text-lg font-extrabold text-blue-700">
+                  {ar ? "تسجيل صيانة" : "Add Maintenance"}
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  {ar ? "إضافة عملية صيانة جديدة" : "Add new maintenance"}
+                </p>
+              </div>
+            </div>
+          </Link>
+
+          <Link
+            href={`/oil-changes/add?vehicle=${vehicle.id}`}
+            className="group rounded-2xl border border-orange-100 bg-orange-50 p-5 transition-all hover:-translate-y-1 hover:border-orange-200 hover:bg-orange-100"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-500 text-white shadow-lg shadow-orange-500/20">
+                <Droplets className="h-8 w-8" />
+              </div>
+
+              <div className="text-right">
+                <h3 className="text-lg font-extrabold text-orange-600">
+                  {ar ? "تغيير زيت" : "Oil Change"}
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  {ar ? "إضافة تغيير زيت جديد" : "Add oil change"}
+                </p>
+              </div>
+            </div>
+          </Link>
+
+          <Link
+          href={`/maintenance/incidents?vehicle_id=${vehicle.id}`}
+            className="group rounded-2xl border border-red-100 bg-red-50 p-5 transition-all hover:-translate-y-1 hover:border-red-200 hover:bg-red-100"
+          >
+            <div className="flex items-center gap-4">
+              <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-500 text-white shadow-lg shadow-red-500/20">
+                <AlertTriangle className="h-8 w-8" />
+              </div>
+
+              <div className="text-right">
+                <h3 className="text-lg font-extrabold text-red-600">
+                  {ar ? "تسجيل حادث / عطل" : "Record Accident"}
+                </h3>
+
+                <p className="mt-1 text-sm text-slate-500">
+                  {ar ? "إضافة حادث أو عطل جديد" : "Add accident or issue"}
+                </p>
+              </div>
+            </div>
+          </Link>
+        </div>
+      </section>
+
+      <section className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
+        <MiniStat title={ar ? "عداد الكيلومترات" : "Odometer"} value={`${vehicle.odometer || "-"} KM`} icon={<Gauge />} />
+        <MiniStat title={ar ? "التأمين" : "Insurance"} value={vehicle.insurance_expiry || "-"} icon={<Shield />} />
+        <MiniStat
+          title="GPS"
+          value={
+            vehicle.gps_enabled
+              ? ar
+                ? "متوفر"
+                : "Available"
+              : ar
+              ? "غير متوفر"
+              : "Not Available"
+          }
+          icon={<MapPin />}
+        />
+        <MiniStat
+          title={ar ? "شريحة البنزين" : "Fuel SIM"}
+          value={
+            vehicle.fuel_sim_enabled
+              ? ar
+                ? "متوفرة"
+                : "Available"
+              : ar
+              ? "غير متوفرة"
+              : "Not Available"
+          }
+          icon={<Fuel />}
+        />
+        <MiniStat title={ar ? "الحالة" : "Status"} value={vehicle.vehicle_status || "-"} icon={<CheckCircle />} />
+      </section>
+    </>
+  );
 }
 
-function Info({ title, value }: { title: string; value: any }) {
+function Card({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="bg-gray-100 p-5 rounded-2xl">
-      <p className="text-gray-500">{title}</p>
-      <h2 className="text-xl font-bold">{value || "-"}</h2>
-    </div>
-  )
-}
-
-function TabButton({ active, onClick, children }: any) {
-  return (
-    <button
-      onClick={onClick}
-      className={`p-4 rounded-2xl ${
-        active ? "bg-teal-500 text-black font-bold" : "bg-black text-white"
-      }`}
-    >
-      {children}
-    </button>
-  )
-}
-
-function Timeline({ children }: any) {
-  return (
-    <div className="relative border-r-4 border-teal-500 pr-6 space-y-5">
-      {children}
-    </div>
-  )
-}
-
-function TimelineItem({ title, date, children }: any) {
-  return (
-    <div className="relative bg-gray-50 border rounded-2xl p-5 shadow-sm">
-      <span className="absolute -right-[35px] top-5 w-5 h-5 bg-teal-500 rounded-full border-4 border-white"></span>
-
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-3 gap-2">
-        <h4 className="font-bold text-lg">{title}</h4>
-        <span className="text-sm text-gray-500">{date}</span>
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex items-center justify-between">
+        <h2 className="text-xl font-extrabold">{title}</h2>
+        {icon && <div className="text-blue-700">{icon}</div>}
       </div>
+      {children}
+    </div>
+  );
+}
 
-      <div className="space-y-2 text-gray-700">
-        {children}
+function Info({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3">
+      <div className="text-slate-500">{icon}</div>
+      <div>
+        <p className="text-xs text-slate-500">{label}</p>
+        <p className="mt-1 font-extrabold">{value}</p>
       </div>
     </div>
-  )
+  );
+}
+
+function InfoRow({
+  label,
+  value,
+  green,
+}: {
+  label: string;
+  value: string;
+  green?: boolean;
+}) {
+  return (
+    <div className="mb-3 flex items-center justify-between gap-3">
+      <span className="text-sm text-slate-500">{label}</span>
+      <span className={green ? "font-bold text-green-700" : "font-bold"}>{value}</span>
+    </div>
+  );
+}
+
+function MiniStat({
+  title,
+  value,
+  icon,
+}: {
+  title: string;
+  value: string;
+  icon: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="font-bold text-slate-600">{title}</p>
+          <h3 className="mt-3 text-xl font-extrabold">{value}</h3>
+        </div>
+
+        <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+          {icon}
+        </div>
+      </div>
+    </div>
+  );
 }

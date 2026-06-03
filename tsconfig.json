@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-  ],
+, "locales/en", "locales/ar"  ],
   "exclude": ["node_modules"]
 }
