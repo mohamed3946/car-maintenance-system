@@ -1,8 +1,10 @@
 "use client";
 
+import { supabase } from "../../lib/supabase";
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import AppLayout, { useLanguage } from "../../../components/AppLayout";
+import * as XLSX from "xlsx";
 import {
   ArrowRight,
   CloudUpload,
@@ -64,6 +66,8 @@ export default function AddEmployeePage() {
 function AddEmployeeContent() {
   const { lang } = useLanguage();
   const isAr = lang === "ar";
+
+  const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState<FormData>({
     name: "",
@@ -132,7 +136,45 @@ function AddEmployeeContent() {
     return form.jobTitle === "keetaCourier" || form.jobTitle === "hungerCourier";
   }, [form.jobTitle]);
 
+  const showPlatformId =
+    form.jobTitle === "keetaCourier" || form.jobTitle === "hungerCourier";
+
+  const platformIdLabel =
+    form.jobTitle === "keetaCourier"
+      ? isAr
+        ? "رقم ID كيتا"
+        : "Keeta ID"
+      : isAr
+        ? "رقم ID هنجرستيشن"
+        : "HungerStation ID";
+
   function updateField(key: keyof FormData, value: string) {
+    if (key === "jobTitle") {
+      let nextWorkLocation = form.workLocation;
+      let nextPlatformId = form.platformId;
+
+      if (value === "keetaCourier") {
+        nextWorkLocation = "Keeta";
+      } else if (value === "hungerCourier") {
+        nextWorkLocation = "HungerStation";
+      } else if (value === "supervisor") {
+        nextWorkLocation = "management";
+        nextPlatformId = "";
+      } else if (value === "mechanic" || value === "maintenanceOfficer") {
+        nextWorkLocation = "maintenance";
+        nextPlatformId = "";
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        jobTitle: value,
+        workLocation: nextWorkLocation,
+        platformId: nextPlatformId,
+      }));
+
+      return;
+    }
+
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -140,7 +182,107 @@ function AddEmployeeContent() {
     setDocs((prev) => ({ ...prev, [key]: file }));
   }
 
-  function saveEmployee() {
+  async function importEmployeesFromExcel(file: File) {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+
+    const employees = rows.map((row) => {
+      const jobTitleRaw = String(row["Job Title"] || "").toLowerCase();
+
+      let jobTitle = "keetaCourier";
+      let workLocation = "Keeta";
+
+      if (jobTitleRaw.includes("hunger")) {
+        jobTitle = "hungerCourier";
+        workLocation = "HungerStation";
+      } else if (jobTitleRaw.includes("keeta")) {
+        jobTitle = "keetaCourier";
+        workLocation = "Keeta";
+      } else if (jobTitleRaw.includes("supervisor")) {
+        jobTitle = "supervisor";
+        workLocation = "management";
+      } else if (jobTitleRaw.includes("mechanic")) {
+        jobTitle = "mechanic";
+        workLocation = "maintenance";
+      }
+
+      const keetaId = row["Keeta ID"] ? String(row["Keeta ID"]).trim() : null;
+      const hungerId = row["HungerStation ID"]
+        ? String(row["HungerStation ID"]).trim()
+        : null;
+
+      return {
+        name: String(row["Employee Name"] || "").trim(),
+        iqama: String(row["Iqama Number"] || "").trim(),
+        phone: row["Phone"] ? String(row["Phone"]).trim() : null,
+        nationality: row["Nationality"] ? String(row["Nationality"]).trim() : null,
+        job_title: jobTitle,
+        work_location: workLocation,
+        status: row["Status"] ? String(row["Status"]).trim() : "active",
+        performance: "good",
+        base_salary: row["Base Salary"] ? Number(row["Base Salary"]) : null,
+        platform_id: keetaId || hungerId || null,
+        keeta_id: keetaId,
+        hunger_id: hungerId,
+      };
+    });
+
+    const validEmployees = employees.filter((e) => e.name && e.iqama);
+
+    if (validEmployees.length === 0) {
+      alert(isAr ? "لا توجد بيانات صالحة في الملف" : "No valid employees found");
+      return;
+    }
+
+    const { error } = await supabase.from("employees").insert(validEmployees);
+
+    if (error) {
+      console.error("IMPORT EMPLOYEES ERROR:", error);
+      alert(isAr ? `فشل رفع الملف: ${error.message}` : `Import failed: ${error.message}`);
+      return;
+    }
+
+    alert(
+      isAr
+        ? `تم إضافة ${validEmployees.length} موظف بنجاح`
+        : `${validEmployees.length} employees imported successfully`
+    );
+
+    window.location.href = "/employees/list";
+  }
+
+  async function uploadEmployeeFile(
+    file: File | null,
+    employeeId: string,
+    folder: string
+  ) {
+    if (!file) return null;
+
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${employeeId}/${folder}-${Date.now()}.${fileExt}`;
+
+    const { error } = await supabase.storage
+      .from("employee-documents")
+      .upload(fileName, file, {
+        cacheControl: "3600",
+        upsert: true,
+      });
+
+    if (error) {
+      console.error("UPLOAD FILE ERROR:", error);
+      throw error;
+    }
+
+    const { data } = supabase.storage
+      .from("employee-documents")
+      .getPublicUrl(fileName);
+
+    return data.publicUrl;
+  }
+
+  async function saveEmployee() {
     if (!form.name.trim()) {
       alert(isAr ? "اكتب اسم الموظف" : "Enter employee name");
       return;
@@ -151,7 +293,112 @@ function AddEmployeeContent() {
       return;
     }
 
-    alert(isAr ? "تم حفظ بيانات الموظف مؤقتًا" : "Employee saved temporarily");
+    if (showPlatformId && !form.platformId.trim()) {
+      alert(isAr ? `اكتب ${platformIdLabel}` : `Enter ${platformIdLabel}`);
+      return;
+    }
+
+    setSaving(true);
+
+    const employeeData = {
+      name: form.name.trim(),
+      iqama: form.iqama.trim(),
+      phone: form.phone || null,
+      nationality: form.nationality || null,
+      job_title: form.jobTitle,
+      work_location: form.workLocation,
+      status: form.status,
+      performance: form.performance,
+      start_date: form.startDate || null,
+      base_salary: form.baseSalary ? Number(form.baseSalary) : null,
+      target: form.target ? Number(form.target) : null,
+      half_target: form.halfTarget ? Number(form.halfTarget) : null,
+      target_deductions: form.targetDeductions ? Number(form.targetDeductions) : null,
+      vehicle_number: form.vehicleNumber || null,
+      platform_id: showPlatformId ? form.platformId.trim() : null,
+      keeta_id: form.jobTitle === "keetaCourier" ? form.platformId.trim() : null,
+      hunger_id: form.jobTitle === "hungerCourier" ? form.platformId.trim() : null,
+      notes: form.notes || null,
+    };
+
+    const { data, error } = await supabase
+      .from("employees")
+      .insert(employeeData)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("SAVE EMPLOYEE ERROR:", error);
+      alert(
+        isAr
+          ? `فشل حفظ الموظف: ${error.message}`
+          : `Failed to save employee: ${error.message}`
+      );
+      setSaving(false);
+      return;
+    }
+
+    try {
+      const employeeId = data.id;
+
+      const photoUrl = await uploadEmployeeFile(
+        docs.employeeImage,
+        employeeId,
+        "employee-photo"
+      );
+
+      const iqamaUrl = await uploadEmployeeFile(
+        docs.idImage,
+        employeeId,
+        "iqama"
+      );
+
+      const licenseUrl = await uploadEmployeeFile(
+        docs.licenseImage,
+        employeeId,
+        "license"
+      );
+
+      const qiwaUrl = await uploadEmployeeFile(
+        docs.qiwaContract,
+        employeeId,
+        "qiwa-contract"
+      );
+
+      const custodyUrl = await uploadEmployeeFile(
+        docs.vehicleCustody,
+        employeeId,
+        "vehicle-custody"
+      );
+
+      const otherDocsUrl = await uploadEmployeeFile(
+        docs.otherDocs,
+        employeeId,
+        "other-docs"
+      );
+
+      await supabase
+        .from("employees")
+        .update({
+          photo_url: photoUrl,
+          iqama_file_url: iqamaUrl,
+          license_file_url: licenseUrl,
+          qiwa_file_url: qiwaUrl,
+          custody_file_url: custodyUrl,
+          other_docs_url: otherDocsUrl,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", employeeId);
+    } catch (uploadError) {
+      console.error("DOCUMENT UPLOAD ERROR:", uploadError);
+      alert(
+        isAr
+          ? "تم حفظ الموظف، لكن حدث خطأ أثناء رفع بعض المستندات"
+          : "Employee saved, but some documents failed to upload"
+      );
+    }
+
+    alert(isAr ? "تم حفظ الموظف بنجاح" : "Employee saved successfully");
     window.location.href = "/employees/list";
   }
 
@@ -169,13 +416,28 @@ function AddEmployeeContent() {
           </p>
         </div>
 
-        <Link
-          href="/employees/list"
-          className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-extrabold text-slate-700 shadow-sm hover:bg-slate-50"
-        >
-          <ArrowRight className="h-5 w-5" />
-          {isAr ? "الرجوع للقائمة" : "Back To List"}
-        </Link>
+        <div className="flex flex-wrap gap-3">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-2xl bg-green-600 px-5 py-3 text-sm font-extrabold text-white shadow-sm hover:bg-green-700">
+            {isAr ? "رفع Excel" : "Import Excel"}
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) importEmployeesFromExcel(file);
+              }}
+            />
+          </label>
+
+          <Link
+            href="/employees/list"
+            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-extrabold text-slate-700 shadow-sm hover:bg-slate-50"
+          >
+            <ArrowRight className="h-5 w-5" />
+            {isAr ? "الرجوع للقائمة" : "Back To List"}
+          </Link>
+        </div>
       </div>
 
       <FormSection
@@ -197,11 +459,23 @@ function AddEmployeeContent() {
       >
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           <Select label={isAr ? "المسمى الوظيفي" : "Job Title"} value={form.jobTitle} onChange={(v) => updateField("jobTitle", v)} options={jobOptions} />
-          <Select label={isAr ? "موقع العمل" : "Work Location"} value={form.workLocation} onChange={(v) => updateField("workLocation", v)} options={workLocationOptions} />
+
+          <Select label={isAr ? "موقع العمل" : "Work Location"} value={form.workLocation} onChange={(v) => updateField("workLocation", v)} options={workLocationOptions} disabled />
+
           <Select label={isAr ? "الحالة" : "Status"} value={form.status} onChange={(v) => updateField("status", v)} options={statusOptions} />
+
           <Select label={isAr ? "الأداء" : "Performance"} value={form.performance} onChange={(v) => updateField("performance", v)} options={performanceOptions} />
+
           <Input label={isAr ? "رقم المركبة / الدباب" : "Vehicle Number"} value={form.vehicleNumber} onChange={(v) => updateField("vehicleNumber", v)} />
-          <Input label={isAr ? "رقم هوية كيتا / هنقر" : "Keeta / Hunger ID"} value={form.platformId} onChange={(v) => updateField("platformId", v)} />
+
+          {showPlatformId && (
+            <Input
+              label={platformIdLabel}
+              value={form.platformId}
+              onChange={(v) => updateField("platformId", v)}
+              required
+            />
+          )}
         </div>
       </FormSection>
 
@@ -265,10 +539,17 @@ function AddEmployeeContent() {
 
         <button
           onClick={saveEmployee}
-          className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-extrabold text-white hover:bg-blue-700"
+          disabled={saving}
+          className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-extrabold text-white hover:bg-blue-700 disabled:opacity-60"
         >
           <Save className="h-5 w-5" />
-          {isAr ? "حفظ الموظف" : "Save Employee"}
+          {saving
+            ? isAr
+              ? "جاري الحفظ..."
+              : "Saving..."
+            : isAr
+              ? "حفظ الموظف"
+              : "Save Employee"}
         </button>
       </div>
     </>
@@ -330,19 +611,22 @@ function Select({
   value,
   onChange,
   options,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: SelectOption[];
+  disabled?: boolean;
 }) {
   return (
     <label className="space-y-2">
       <span className="text-sm font-extrabold text-slate-600">{label}</span>
       <select
         value={value}
+        disabled={disabled}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>

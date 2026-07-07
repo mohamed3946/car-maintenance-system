@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import AppLayout, { useLanguage } from "../../../components/AppLayout";
+import { supabase } from "../../lib/supabase";
 import {
   ArrowRight,
   Bell,
@@ -16,24 +19,32 @@ import {
   Wallet,
 } from "lucide-react";
 
-const employee = {
-  id: 1,
-  name: "أحمد محمد",
-  iqama: "251xxxxxxx",
-  phone: "05xxxxxxxx",
-  nationality: "مصري",
-  jobTitle: "مندوب كيتا",
-  workLocation: "Keeta",
-  status: "نشط",
-  performance: "جيد",
-  startDate: "2024-01-15",
-  baseSalary: "1300",
-  target: "350",
-  halfTarget: "175",
-  targetDeductions: "حسب سياسة التطبيق",
-  vehicleNumber: "ب ب 1254",
-  platformId: "KT-1254",
-  notes: "لا توجد ملاحظات",
+type Lang = "ar" | "en";
+
+type Employee = {
+  photo_url: string | null;
+iqama_file_url: string | null;
+license_file_url: string | null;
+qiwa_file_url: string | null;
+custody_file_url: string | null;
+other_docs_url: string | null;
+  id: string;
+  name: string;
+  iqama: string;
+  phone: string | null;
+  nationality: string | null;
+  job_title: string | null;
+  work_location: string | null;
+  status: string | null;
+  performance: string | null;
+  start_date: string | null;
+  base_salary: number | string | null;
+  target: number | string | null;
+  half_target: number | string | null;
+  target_deductions: number | string | null;
+  vehicle_number: string | null;
+  platform_id: string | null;
+  notes: string | null;
 };
 
 const documents = [
@@ -71,10 +82,16 @@ export default function EmployeeDetailsPage() {
 function EmployeeDetailsContent() {
   const { lang } = useLanguage();
   const isAr = lang === "ar";
+  const params = useParams();
+
+  const [employee, setEmployee] = useState<Employee | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const t = {
     back: isAr ? "الرجوع لقائمة الموظفين" : "Back To Employees",
     edit: isAr ? "تعديل بيانات الموظف" : "Edit Employee",
+    loading: isAr ? "جاري تحميل بيانات الموظف..." : "Loading employee data...",
+    notFound: isAr ? "لم يتم العثور على الموظف" : "Employee Not Found",
 
     status: isAr ? "الحالة" : "Status",
     performance: isAr ? "الأداء" : "Performance",
@@ -110,7 +127,48 @@ function EmployeeDetailsContent() {
 
     sar: isAr ? "ريال" : "SAR",
     order: isAr ? "طلب" : "Orders",
+    empty: "-",
   };
+
+  useEffect(() => {
+    loadEmployee();
+  }, [params.id]);
+
+  async function loadEmployee() {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("employees")
+      .select("*")
+      .eq("id", params.id)
+      .single();
+
+    if (error) {
+      console.error("LOAD EMPLOYEE ERROR:", error);
+      setEmployee(null);
+      setLoading(false);
+      return;
+    }
+
+    setEmployee(data as Employee);
+    setLoading(false);
+  }
+
+  if (loading) {
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center font-bold text-slate-500 shadow-sm">
+        {t.loading}
+      </div>
+    );
+  }
+
+  if (!employee) {
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center font-bold text-red-500 shadow-sm">
+        {t.notFound}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -125,12 +183,12 @@ function EmployeeDetailsContent() {
           </Link>
 
           <h1 className="text-3xl font-extrabold text-[#0f2544]">
-            {employeeNameText(employee.name, lang)}
+            {employee.name || t.empty}
           </h1>
 
           <p className="mt-1 text-sm text-slate-500">
-            {jobTitleText(employee.jobTitle, lang)} -{" "}
-            {workLocationText(employee.workLocation, lang)}
+            {jobTitleText(employee.job_title, lang)} -{" "}
+            {workLocationText(employee.work_location, lang)}
           </p>
         </div>
 
@@ -144,38 +202,65 @@ function EmployeeDetailsContent() {
       </div>
 
       <div className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-        <StatCard title={t.status} value={statusText(employee.status, lang)} icon={<User />} color="green" />
-        <StatCard title={t.performance} value={performanceText(employee.performance, lang)} icon={<BriefcaseBusiness />} color="blue" />
-        <StatCard title={t.baseSalary} value={`${employee.baseSalary} ${t.sar}`} icon={<Wallet />} color="orange" />
-        <StatCard title={t.vehicle} value={employee.vehicleNumber} icon={<Car />} color="purple" />
+        <StatCard
+          title={t.status}
+          value={statusText(employee.status, lang)}
+          icon={<User />}
+          color="green"
+        />
+        <StatCard
+          title={t.performance}
+          value={performanceText(employee.performance, lang)}
+          icon={<BriefcaseBusiness />}
+          color="blue"
+        />
+        <StatCard
+          title={t.baseSalary}
+          value={`${employee.base_salary || 0} ${t.sar}`}
+          icon={<Wallet />}
+          color="orange"
+        />
+        <StatCard
+          title={t.vehicle}
+          value={employee.vehicle_number || t.empty}
+          icon={<Car />}
+          color="purple"
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <section className="space-y-6 xl:col-span-2">
           <Card title={t.basicInfo} icon={<IdCard className="h-5 w-5" />}>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Info label={t.iqama} value={employee.iqama} />
-              <Info label={t.phone} value={employee.phone} />
-              <Info label={t.nationality} value={nationalityText(employee.nationality, lang)} />
-              <Info label={t.startDate} value={employee.startDate || "-"} />
+              <Info label={t.iqama} value={employee.iqama || t.empty} />
+              <Info label={t.phone} value={employee.phone || t.empty} />
+              <Info label={t.nationality} value={employee.nationality || t.empty} />
+              <Info label={t.startDate} value={employee.start_date || t.empty} />
             </div>
           </Card>
 
           <Card title={t.workInfo} icon={<BriefcaseBusiness className="h-5 w-5" />}>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Info label={t.jobTitle} value={jobTitleText(employee.jobTitle, lang)} />
-              <Info label={t.workLocation} value={workLocationText(employee.workLocation, lang)} />
-              <Info label={t.vehicleNumber} value={employee.vehicleNumber} />
-              <Info label={t.platformId} value={employee.platformId} />
+              <Info label={t.jobTitle} value={jobTitleText(employee.job_title, lang)} />
+              <Info label={t.workLocation} value={workLocationText(employee.work_location, lang)} />
+              <Info label={t.vehicleNumber} value={employee.vehicle_number || t.empty} />
+              <Info label={t.platformId} value={employee.platform_id || t.empty} />
             </div>
           </Card>
 
           <Card title={t.salaryTarget} icon={<Wallet className="h-5 w-5" />}>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <Info label={t.baseSalary} value={`${employee.baseSalary} ${t.sar}`} />
-              <Info label={t.target} value={`${employee.target} ${t.order}`} />
-              <Info label={t.halfTarget} value={`${employee.halfTarget} ${t.order}`} />
-              <Info label={t.targetDeductions} value={targetDeductionsText(employee.targetDeductions, lang)} />
+              <Info label={t.baseSalary} value={`${employee.base_salary || 0} ${t.sar}`} />
+              <Info label={t.target} value={`${employee.target || 0} ${t.order}`} />
+              <Info label={t.halfTarget} value={`${employee.half_target || 0} ${t.order}`} />
+              <Info
+                label={t.targetDeductions}
+                value={
+                  employee.target_deductions
+                    ? String(employee.target_deductions)
+                    : t.empty
+                }
+              />
             </div>
           </Card>
 
@@ -198,36 +283,60 @@ function EmployeeDetailsContent() {
                 <User className="h-16 w-16" />
               </div>
               <h3 className="mt-4 text-xl font-extrabold text-[#0f2544]">
-                {employeeNameText(employee.name, lang)}
+                {employee.name || t.empty}
               </h3>
               <p className="text-sm font-bold text-slate-500">
-                {jobTitleText(employee.jobTitle, lang)}
+                {jobTitleText(employee.job_title, lang)}
               </p>
             </div>
           </Card>
 
           <Card title={t.documents} icon={<FileText className="h-5 w-5" />}>
-            <div className="space-y-3">
-              {documents.map((doc) => (
-                <div
-                  key={doc}
-                  className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-3"
-                >
-                  <span className="text-sm font-extrabold text-[#0f2544]">
-                    {documentText(doc, lang)}
-                  </span>
-                  <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700">
-                    {t.notAttached}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </Card>
+  <div className="space-y-3">
+    <DocumentRow
+      title={isAr ? "صورة الهوية / الإقامة" : "ID / Iqama Image"}
+      url={employee.iqama_file_url}
+      notAttached={t.notAttached}
+      openText={isAr ? "عرض" : "View"}
+    />
+
+    <DocumentRow
+      title={isAr ? "صورة رخصة القيادة" : "Driving License Image"}
+      url={employee.license_file_url}
+      notAttached={t.notAttached}
+      openText={isAr ? "عرض" : "View"}
+    />
+
+    <DocumentRow
+      title={isAr ? "عقد قوى" : "Qiwa Contract"}
+      url={employee.qiwa_file_url}
+      notAttached={t.notAttached}
+      openText={isAr ? "عرض" : "View"}
+    />
+
+    <DocumentRow
+      title={isAr ? "عهدة استلام مركبة" : "Vehicle Custody Form"}
+      url={employee.custody_file_url}
+      notAttached={t.notAttached}
+      openText={isAr ? "عرض" : "View"}
+    />
+
+    <DocumentRow
+      title={isAr ? "مستندات أخرى" : "Other Documents"}
+      url={employee.other_docs_url}
+      notAttached={t.notAttached}
+      openText={isAr ? "عرض" : "View"}
+    />
+  </div>
+</Card>
 
           <Card title={t.warnings} icon={<Bell className="h-5 w-5" />}>
             <div className="space-y-3">
               {alerts.map((item) => (
-                <div key={item.type} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                <div
+                  key={item.type}
+                  className="rounded-2xl border border-slate-100 bg-slate-50 p-3"
+                >
                   <p className="font-extrabold text-[#0f2544]">
                     {alertTypeText(item.type, lang)}
                   </p>
@@ -241,7 +350,7 @@ function EmployeeDetailsContent() {
 
           <Card title={t.notes} icon={<ShieldAlert className="h-5 w-5" />}>
             <p className="rounded-2xl bg-slate-50 p-4 text-sm font-bold text-slate-600">
-              {notesText(employee.notes, lang)}
+              {employee.notes || t.empty}
             </p>
           </Card>
         </aside>
@@ -250,69 +359,68 @@ function EmployeeDetailsContent() {
   );
 }
 
-function employeeNameText(value: string, lang: string) {
-  const map: Record<string, string> = {
-    "أحمد محمد": lang === "ar" ? "أحمد محمد" : "Ahmed Mohamed",
+function statusText(value: string | null, lang: Lang) {
+  const map: Record<string, { ar: string; en: string }> = {
+    active: { ar: "نشط", en: "Active" },
+    stopped: { ar: "متوقف", en: "Stopped" },
+    vacation: { ar: "إجازة", en: "Vacation" },
+    outOfService: { ar: "خارج الخدمة", en: "Out Of Service" },
+    "نشط": { ar: "نشط", en: "Active" },
+    "متوقف": { ar: "متوقف", en: "Stopped" },
+    "إجازة": { ar: "إجازة", en: "Vacation" },
+    "خارج الخدمة": { ar: "خارج الخدمة", en: "Out Of Service" },
   };
-  return map[value] || value;
+  if (!value) return "-";
+  return map[value]?.[lang] || value;
 }
 
-function nationalityText(value: string, lang: string) {
-  const map: Record<string, string> = {
-    "مصري": lang === "ar" ? "مصري" : "Egyptian",
+function performanceText(value: string | null, lang: Lang) {
+  const map: Record<string, { ar: string; en: string }> = {
+    excellent: { ar: "ممتاز", en: "Excellent" },
+    good: { ar: "جيد", en: "Good" },
+    average: { ar: "متوسط", en: "Average" },
+    weak: { ar: "ضعيف", en: "Poor" },
+    ممتاز: { ar: "ممتاز", en: "Excellent" },
+    جيد: { ar: "جيد", en: "Good" },
+    متوسط: { ar: "متوسط", en: "Average" },
+    ضعيف: { ar: "ضعيف", en: "Poor" },
   };
-  return map[value] || value;
+  if (!value) return "-";
+  return map[value]?.[lang] || value;
 }
 
-function jobTitleText(value: string, lang: string) {
-  const map: Record<string, string> = {
-    "مندوب كيتا": lang === "ar" ? "مندوب كيتا" : "Keeta Courier",
-    "مندوب هنقرستيشن": lang === "ar" ? "مندوب هنقرستيشن" : "HungerStation Courier",
-    مشرف: lang === "ar" ? "مشرف" : "Supervisor",
-    ميكانيكي: lang === "ar" ? "ميكانيكي" : "Mechanic",
-    "مسؤول الصيانة": lang === "ar" ? "مسؤول الصيانة" : "Maintenance Officer",
+function workLocationText(value: string | null, lang: Lang) {
+  const map: Record<string, { ar: string; en: string }> = {
+    Keeta: { ar: "Keeta", en: "Keeta" },
+    HungerStation: { ar: "HungerStation", en: "HungerStation" },
+    management: { ar: "الإدارة", en: "Management" },
+    maintenance: { ar: "الصيانة", en: "Maintenance" },
+    الإدارة: { ar: "الإدارة", en: "Management" },
+    الصيانة: { ar: "الصيانة", en: "Maintenance" },
   };
-  return map[value] || value;
+  if (!value) return "-";
+  return map[value]?.[lang] || value;
 }
 
-function workLocationText(value: string, lang: string) {
-  const map: Record<string, string> = {
-    Keeta: "Keeta",
-    HungerStation: "HungerStation",
-    الإدارة: lang === "ar" ? "الإدارة" : "Management",
-    الصيانة: lang === "ar" ? "الصيانة" : "Maintenance",
+function jobTitleText(value: string | null, lang: Lang) {
+  const map: Record<string, { ar: string; en: string }> = {
+    keetaCourier: { ar: "مندوب كيتا", en: "Keeta Courier" },
+    hungerCourier: { ar: "مندوب هنجرستيشن", en: "HungerStation Courier" },
+    supervisor: { ar: "مشرف", en: "Supervisor" },
+    mechanic: { ar: "ميكانيكي", en: "Mechanic" },
+    maintenanceOfficer: { ar: "مسؤول الصيانة", en: "Maintenance Officer" },
+    "مندوب كيتا": { ar: "مندوب كيتا", en: "Keeta Courier" },
+    "مندوب هنقرستيشن": { ar: "مندوب هنجرستيشن", en: "HungerStation Courier" },
+    "مندوب هنجرستيشن": { ar: "مندوب هنجرستيشن", en: "HungerStation Courier" },
+    مشرف: { ar: "مشرف", en: "Supervisor" },
+    ميكانيكي: { ar: "ميكانيكي", en: "Mechanic" },
+    "مسؤول الصيانة": { ar: "مسؤول الصيانة", en: "Maintenance Officer" },
   };
-  return map[value] || value;
+  if (!value) return "-";
+  return map[value]?.[lang] || value;
 }
 
-function statusText(value: string, lang: string) {
-  const map: Record<string, string> = {
-    نشط: lang === "ar" ? "نشط" : "Active",
-    متوقف: lang === "ar" ? "متوقف" : "Stopped",
-    إجازة: lang === "ar" ? "إجازة" : "Vacation",
-    "خارج الخدمة": lang === "ar" ? "خارج الخدمة" : "Out Of Service",
-  };
-  return map[value] || value;
-}
-
-function performanceText(value: string, lang: string) {
-  const map: Record<string, string> = {
-    ممتاز: lang === "ar" ? "ممتاز" : "Excellent",
-    جيد: lang === "ar" ? "جيد" : "Good",
-    متوسط: lang === "ar" ? "متوسط" : "Average",
-    ضعيف: lang === "ar" ? "ضعيف" : "Poor",
-  };
-  return map[value] || value;
-}
-
-function targetDeductionsText(value: string, lang: string) {
-  const map: Record<string, string> = {
-    "حسب سياسة التطبيق": lang === "ar" ? "حسب سياسة التطبيق" : "According to app policy",
-  };
-  return map[value] || value;
-}
-
-function attendanceStatusText(value: string, lang: string) {
+function attendanceStatusText(value: string, lang: Lang) {
   const map: Record<string, string> = {
     present: lang === "ar" ? "حاضر" : "Present",
     absent: lang === "ar" ? "غياب" : "Absent",
@@ -320,7 +428,7 @@ function attendanceStatusText(value: string, lang: string) {
   return map[value] || value;
 }
 
-function documentText(value: string, lang: string) {
+function documentText(value: string, lang: Lang) {
   const map: Record<string, string> = {
     idImage: lang === "ar" ? "صورة الهوية / الإقامة" : "ID / Iqama Image",
     licenseImage: lang === "ar" ? "صورة رخصة القيادة" : "Driving License Image",
@@ -332,7 +440,7 @@ function documentText(value: string, lang: string) {
   return map[value] || value;
 }
 
-function alertTypeText(value: string, lang: string) {
+function alertTypeText(value: string, lang: Lang) {
   const map: Record<string, string> = {
     absence: lang === "ar" ? "تغيب عن العمل" : "Work Absence",
     poorPerformance: lang === "ar" ? "سوء أداء" : "Poor Performance",
@@ -340,17 +448,10 @@ function alertTypeText(value: string, lang: string) {
   return map[value] || value;
 }
 
-function alertStatusText(value: string, lang: string) {
+function alertStatusText(value: string, lang: Lang) {
   const map: Record<string, string> = {
     sent: lang === "ar" ? "تم الإرسال" : "Sent",
     draft: lang === "ar" ? "مسودة" : "Draft",
-  };
-  return map[value] || value;
-}
-
-function notesText(value: string, lang: string) {
-  const map: Record<string, string> = {
-    "لا توجد ملاحظات": lang === "ar" ? "لا توجد ملاحظات" : "No notes",
   };
   return map[value] || value;
 }
@@ -374,6 +475,41 @@ function Card({
       </div>
       {children}
     </section>
+  );
+}
+
+function DocumentRow({
+  title,
+  url,
+  notAttached,
+  openText,
+}: {
+  title: string;
+  url: string | null;
+  notAttached: string;
+  openText: string;
+}) {
+  return (
+    <div className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-3">
+      <span className="text-sm font-extrabold text-[#0f2544]">
+        {title}
+      </span>
+
+      {url ? (
+        <a
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-full bg-green-50 px-3 py-1 text-xs font-bold text-green-700 hover:bg-green-100"
+        >
+          {openText}
+        </a>
+      ) : (
+        <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-orange-700">
+          {notAttached}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -404,8 +540,11 @@ function Table({ headers, rows }: { headers: string[]; rows: string[][] }) {
         <tbody>
           {rows.map((row) => (
             <tr key={row.join("-")} className="border-t border-slate-100">
-              {row.map((cell) => (
-                <td key={cell} className="p-3 text-start font-bold text-slate-600">
+              {row.map((cell, index) => (
+                <td
+                  key={`${cell}-${index}`}
+                  className="p-3 text-start font-bold text-slate-600"
+                >
                   {cell}
                 </td>
               ))}
