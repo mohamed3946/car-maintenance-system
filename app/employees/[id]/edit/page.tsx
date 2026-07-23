@@ -1,7 +1,10 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import AppLayout, { useLanguage } from "../../../../components/AppLayout";
+import { supabase } from "../../../lib/supabase";
 import {
   ArrowRight,
   CloudUpload,
@@ -13,13 +16,50 @@ import {
   Wallet,
 } from "lucide-react";
 
+type FormData = {
+  name: string;
+  iqama: string;
+  phone: string;
+  email: string;
+  nationality: string;
+  jobTitle: string;
+  workLocation: string;
+  status: string;
+  performance: string;
+  startDate: string;
+  baseSalary: string;
+  target: string;
+  halfTarget: string;
+  targetDeductions: string;
+  vehicleNumber: string;
+  keetaId: string;
+  hungerId: string;
+  notes: string;
+  photoUrl: string;
+  iqamaFileUrl: string;
+  licenseFileUrl: string;
+  qiwaFileUrl: string;
+  custodyFileUrl: string;
+  otherDocsUrl: string;
+};
+
+type DocsData = {
+  employeeImage: File | null;
+  idImage: File | null;
+  licenseImage: File | null;
+  qiwaContract: File | null;
+  vehicleCustody: File | null;
+  otherDocs: File | null;
+};
+
+type Option = {
+  value: string;
+  label: string;
+};
+
 export default function EditEmployeePage() {
   return (
-    <AppLayout
-      system="employees"
-      titleKey="editEmployeeTitle"
-      subtitleKey="editEmployeeSubtitle"
-    >
+    <AppLayout system="employees">
       <EditEmployeeContent />
     </AppLayout>
   );
@@ -28,6 +68,285 @@ export default function EditEmployeePage() {
 function EditEmployeeContent() {
   const { lang } = useLanguage();
   const isAr = lang === "ar";
+  const params = useParams();
+  const router = useRouter();
+  const employeeId = String(params.id);
+
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const [docs, setDocs] = useState<DocsData>({
+    employeeImage: null,
+    idImage: null,
+    licenseImage: null,
+    qiwaContract: null,
+    vehicleCustody: null,
+    otherDocs: null,
+  });
+
+  const [form, setForm] = useState<FormData>({
+    name: "",
+    iqama: "",
+    phone: "",
+    email: "",
+    nationality: "",
+    jobTitle: "deliveryCourier",
+    workLocation: "Keeta",
+    status: "active",
+    performance: "good",
+    startDate: "",
+    baseSalary: "",
+    target: "",
+    halfTarget: "",
+    targetDeductions: "",
+    vehicleNumber: "",
+    keetaId: "",
+    hungerId: "",
+    notes: "",
+    photoUrl: "",
+    iqamaFileUrl: "",
+    licenseFileUrl: "",
+    qiwaFileUrl: "",
+    custodyFileUrl: "",
+    otherDocsUrl: "",
+  });
+
+  const isCourier = form.jobTitle === "deliveryCourier";
+
+  const showKeetaId =
+    isCourier &&
+    (form.workLocation === "Keeta" ||
+      form.workLocation === "KeetaAndHungerStation");
+
+  const showHungerId =
+    isCourier &&
+    (form.workLocation === "HungerStation" ||
+      form.workLocation === "KeetaAndHungerStation");
+
+  useEffect(() => {
+    loadEmployee();
+  }, [employeeId]);
+
+  async function loadEmployee() {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from("employees")
+      .select("*")
+      .eq("id", employeeId)
+      .single();
+
+    if (error) {
+      console.error(error);
+      alert(isAr ? "لم يتم العثور على الموظف" : "Employee not found");
+      setLoading(false);
+      return;
+    }
+
+    setForm({
+      name: data.name || "",
+      iqama: data.iqama || "",
+      phone: data.phone || "",
+      email: data.email || "",
+      nationality: data.nationality || "",
+      jobTitle:
+        data.job_title === "keetaCourier" ||
+        data.job_title === "hungerCourier" ||
+        data.job_title === "deliveryCourier"
+          ? "deliveryCourier"
+          : data.job_title || "deliveryCourier",
+      workLocation:
+        data.keeta_id && data.hunger_id
+          ? "KeetaAndHungerStation"
+          : data.hunger_id
+            ? "HungerStation"
+            : data.keeta_id
+              ? "Keeta"
+              : data.work_location === "KeetaAndHungerStation"
+                ? "KeetaAndHungerStation"
+                : data.work_location || "Keeta",
+      status: data.status || "active",
+      performance: data.performance || "good",
+      startDate: data.start_date || "",
+      baseSalary: data.base_salary ? String(data.base_salary) : "",
+      target: data.target ? String(data.target) : "",
+      halfTarget: data.half_target ? String(data.half_target) : "",
+      targetDeductions: data.target_deductions ? String(data.target_deductions) : "",
+      vehicleNumber: data.vehicle_number || "",
+      keetaId: data.keeta_id || (data.job_title === "keetaCourier" ? data.platform_id : "") || "",
+      hungerId: data.hunger_id || (data.job_title === "hungerCourier" ? data.platform_id : "") || "",
+      notes: data.notes || "",
+      photoUrl: data.photo_url || "",
+      iqamaFileUrl: data.iqama_file_url || "",
+      licenseFileUrl: data.license_file_url || "",
+      qiwaFileUrl: data.qiwa_file_url || "",
+      custodyFileUrl: data.custody_file_url || "",
+      otherDocsUrl: data.other_docs_url || "",
+    });
+
+    setLoading(false);
+  }
+
+  function updateField(key: keyof FormData, value: string) {
+    if (key === "jobTitle") {
+      let nextWorkLocation = form.workLocation;
+
+      if (value === "deliveryCourier") {
+        if (
+          !["Keeta", "HungerStation", "KeetaAndHungerStation"].includes(
+            nextWorkLocation
+          )
+        ) {
+          nextWorkLocation = "Keeta";
+        }
+      } else if (value === "supervisor") {
+        nextWorkLocation = "management";
+      } else if (value === "mechanic" || value === "maintenanceOfficer") {
+        nextWorkLocation = "maintenance";
+      }
+
+      setForm((prev) => ({
+        ...prev,
+        jobTitle: value,
+        workLocation: nextWorkLocation,
+      }));
+
+      return;
+    }
+
+    if (key === "workLocation") {
+      setForm((prev) => ({
+        ...prev,
+        workLocation: value,
+      }));
+
+      return;
+    }
+
+    setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function updateDoc(key: keyof DocsData, file: File | null) {
+    setDocs((prev) => ({ ...prev, [key]: file }));
+  }
+
+  async function uploadEmployeeFile(file: File | null, folder: string) {
+    if (!file) return null;
+
+    const fileExt = file.name.split(".").pop();
+    const fileName = `${employeeId}/${folder}-${Date.now()}.${fileExt}`;
+
+    const { error } = await supabase.storage
+      .from("employee-documents")
+      .upload(fileName, file, {
+        cacheControl: "3600",
+        upsert: true,
+      });
+
+    if (error) {
+      console.error("UPLOAD FILE ERROR:", error);
+      throw error;
+    }
+
+    const { data } = supabase.storage
+      .from("employee-documents")
+      .getPublicUrl(fileName);
+
+    return data.publicUrl;
+  }
+
+  async function saveEmployee() {
+    if (!form.name.trim()) {
+      alert(isAr ? "اكتب اسم الموظف" : "Enter employee name");
+      return;
+    }
+
+    if (!form.iqama.trim()) {
+      alert(isAr ? "اكتب رقم الإقامة" : "Enter iqama number");
+      return;
+    }
+
+    if (isCourier && showKeetaId && !form.keetaId.trim()) {
+      alert(isAr ? "اكتب رقم ID كيتا" : "Enter Keeta ID");
+      return;
+    }
+
+    if (isCourier && showHungerId && !form.hungerId.trim()) {
+      alert(isAr ? "اكتب رقم ID هنجرستيشن" : "Enter HungerStation ID");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const photoUrl = await uploadEmployeeFile(docs.employeeImage, "employee-photo");
+      const iqamaUrl = await uploadEmployeeFile(docs.idImage, "iqama");
+      const licenseUrl = await uploadEmployeeFile(docs.licenseImage, "license");
+      const qiwaUrl = await uploadEmployeeFile(docs.qiwaContract, "qiwa-contract");
+      const custodyUrl = await uploadEmployeeFile(docs.vehicleCustody, "vehicle-custody");
+      const otherDocsUrl = await uploadEmployeeFile(docs.otherDocs, "other-docs");
+
+      const { error } = await supabase
+        .from("employees")
+        .update({
+          name: form.name.trim(),
+          iqama: form.iqama.trim(),
+          phone: form.phone || null,
+          email: form.email.trim() || null,
+          nationality: form.nationality || null,
+          job_title: form.jobTitle,
+          work_location: form.workLocation,
+          status: form.status,
+          performance: form.performance,
+          start_date: form.startDate || null,
+          base_salary: form.baseSalary ? Number(form.baseSalary) : null,
+          target: form.target ? Number(form.target) : null,
+          half_target: form.halfTarget ? Number(form.halfTarget) : null,
+          target_deductions: form.targetDeductions ? Number(form.targetDeductions) : null,
+          vehicle_number: form.vehicleNumber || null,
+
+          platform_id:
+            (showKeetaId ? form.keetaId.trim() : "") ||
+            (showHungerId ? form.hungerId.trim() : "") ||
+            null,
+          keeta_id: showKeetaId ? form.keetaId.trim() || null : null,
+          hunger_id: showHungerId ? form.hungerId.trim() || null : null,
+
+          notes: form.notes || null,
+          photo_url: photoUrl || form.photoUrl || null,
+          iqama_file_url: iqamaUrl || form.iqamaFileUrl || null,
+          license_file_url: licenseUrl || form.licenseFileUrl || null,
+          qiwa_file_url: qiwaUrl || form.qiwaFileUrl || null,
+          custody_file_url: custodyUrl || form.custodyFileUrl || null,
+          other_docs_url: otherDocsUrl || form.otherDocsUrl || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", employeeId);
+
+      setSaving(false);
+
+      if (error) {
+        console.error(error);
+        alert(isAr ? "فشل حفظ التعديلات" : "Failed to save changes");
+        return;
+      }
+
+      alert(isAr ? "تم حفظ التعديلات بنجاح" : "Changes saved successfully");
+      router.push(`/employees/${employeeId}`);
+    } catch (error) {
+      console.error("SAVE WITH FILES ERROR:", error);
+      alert(isAr ? "حدث خطأ أثناء رفع المرفقات" : "Error uploading documents");
+      setSaving(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="rounded-3xl border border-slate-200 bg-white p-8 text-center font-bold text-slate-500 shadow-sm">
+        {isAr ? "جاري تحميل بيانات الموظف..." : "Loading employee data..."}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -38,114 +357,165 @@ function EditEmployeeContent() {
           </h1>
           <p className="mt-1 text-sm text-slate-500">
             {isAr
-              ? "تعديل البيانات الأساسية وبيانات العمل والراتب."
-              : "Edit basic, work, and salary information."}
+              ? "تعديل البيانات الأساسية وبيانات العمل والراتب والمرفقات."
+              : "Edit basic, work, salary, and document information."}
           </p>
         </div>
 
         <Link
-          href="/employees/list"
+          href={`/employees/${employeeId}`}
           className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-extrabold text-slate-700 shadow-sm hover:bg-slate-50"
         >
           <ArrowRight className="h-5 w-5" />
-          {isAr ? "الرجوع للقائمة" : "Back"}
+          {isAr ? "الرجوع للتفاصيل" : "Back To Details"}
         </Link>
       </div>
 
       <Section title={isAr ? "البيانات الأساسية" : "Basic Information"} icon={<IdCard />}>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-          <Input label={isAr ? "اسم الموظف" : "Employee Name"} defaultValue={isAr ? "أحمد محمد" : "Ahmed Mohamed"} />
-          <Input label={isAr ? "رقم الإقامة" : "Iqama Number"} defaultValue="251xxxxxxx" />
-          <Input label={isAr ? "رقم الجوال" : "Phone Number"} defaultValue="05xxxxxxxx" />
-          <Input label={isAr ? "الجنسية" : "Nationality"} defaultValue={isAr ? "مصري" : "Egyptian"} />
-          <Input label={isAr ? "تاريخ بداية العمل - اختياري" : "Start Date - Optional"} type="date" />
+          <Input label={isAr ? "اسم الموظف" : "Employee Name"} value={form.name} onChange={(v) => updateField("name", v)} />
+          <Input label={isAr ? "رقم الإقامة" : "Iqama Number"} value={form.iqama} onChange={(v) => updateField("iqama", v)} />
+          <Input label={isAr ? "رقم الجوال" : "Phone Number"} value={form.phone} onChange={(v) => updateField("phone", v)} />
+          <Input label={isAr ? "البريد الإلكتروني" : "Email"} type="email" value={form.email} onChange={(v) => updateField("email", v)} />
+          <Input label={isAr ? "الجنسية" : "Nationality"} value={form.nationality} onChange={(v) => updateField("nationality", v)} />
+          <Input label={isAr ? "تاريخ بداية العمل" : "Start Date"} type="date" value={form.startDate} onChange={(v) => updateField("startDate", v)} />
         </div>
       </Section>
 
       <Section title={isAr ? "بيانات العمل" : "Work Information"} icon={<FileText />}>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-          <Select
-            label={isAr ? "المسمى الوظيفي" : "Job Title"}
-            options={
-              isAr
-                ? ["مندوب كيتا", "مندوب هنقرستيشن", "مشرف", "ميكانيكي", "مسؤول الصيانة"]
-                : ["Keeta Courier", "HungerStation Courier", "Supervisor", "Mechanic", "Maintenance Officer"]
-            }
-          />
+          <Select label={isAr ? "المسمى الوظيفي" : "Job Title"} value={form.jobTitle} onChange={(v) => updateField("jobTitle", v)} options={jobOptions(isAr)} />
+          <Select label={isAr ? "موقع العمل" : "Work Location"} value={form.workLocation} onChange={(v) => updateField("workLocation", v)} options={locationOptions(isAr, form.jobTitle)} />
+          <Select label={isAr ? "الحالة" : "Status"} value={form.status} onChange={(v) => updateField("status", v)} options={statusOptions(isAr)} />
+          <Select label={isAr ? "الأداء" : "Performance"} value={form.performance} onChange={(v) => updateField("performance", v)} options={performanceOptions(isAr)} />
 
-          <Select
-            label={isAr ? "موقع العمل" : "Work Location"}
-            options={
-              isAr
-                ? ["Keeta", "HungerStation", "الإدارة", "الصيانة"]
-                : ["Keeta", "HungerStation", "Management", "Maintenance"]
-            }
-          />
+          <Input label={isAr ? "رقم المركبة / الدباب" : "Vehicle Number"} value={form.vehicleNumber} onChange={(v) => updateField("vehicleNumber", v)} />
 
-          <Select
-            label={isAr ? "الحالة" : "Status"}
-            options={
-              isAr
-                ? ["نشط", "متوقف", "إجازة", "خارج الخدمة"]
-                : ["Active", "Stopped", "Vacation", "Out Of Service"]
-            }
-          />
+          {showKeetaId && (
+            <Input
+              label={isAr ? "رقم ID كيتا" : "Keeta ID"}
+              value={form.keetaId}
+              onChange={(v) => updateField("keetaId", v)}
+            />
+          )}
 
-          <Select
-            label={isAr ? "الأداء" : "Performance"}
-            options={
-              isAr
-                ? ["ممتاز", "جيد", "متوسط", "ضعيف"]
-                : ["Excellent", "Good", "Average", "Poor"]
-            }
-          />
-
-          <Input label={isAr ? "رقم المركبة / الدباب" : "Vehicle Number"} defaultValue="ب ب 1254" />
-          <Input label={isAr ? "رقم هوية كيتا / هنقر" : "Keeta / Hunger ID"} defaultValue="KT-1254" />
+          {showHungerId && (
+            <Input
+              label={isAr ? "رقم ID هنجرستيشن" : "HungerStation ID"}
+              value={form.hungerId}
+              onChange={(v) => updateField("hungerId", v)}
+            />
+          )}
         </div>
       </Section>
 
       <Section title={isAr ? "بيانات الراتب" : "Salary Details"} icon={<Wallet />}>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-          <Input label={isAr ? "الراتب الأساسي" : "Base Salary"} defaultValue="1300" />
-          <Input label={isAr ? "التارجت" : "Target"} defaultValue="350" />
-          <Input label={isAr ? "نصف التارجت" : "Half Target"} defaultValue="175" />
-          <Input label={isAr ? "استقطاعات التارجت" : "Target Deductions"} defaultValue="0" />
+          <Input label={isAr ? "الراتب الأساسي" : "Base Salary"} value={form.baseSalary} onChange={(v) => updateField("baseSalary", v)} />
+          <Input label={isAr ? "التارجت" : "Target"} value={form.target} onChange={(v) => updateField("target", v)} />
+          <Input label={isAr ? "نصف التارجت" : "Half Target"} value={form.halfTarget} onChange={(v) => updateField("halfTarget", v)} />
+          <Input label={isAr ? "استقطاعات التارجت" : "Target Deductions"} value={form.targetDeductions} onChange={(v) => updateField("targetDeductions", v)} />
         </div>
       </Section>
 
-      <Section title={isAr ? "إرفاق المستندات" : "Documents"} icon={<CloudUpload />}>
+      <Section title={isAr ? "تعديل المرفقات" : "Edit Documents"} icon={<CloudUpload />}>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-          <UploadBox label={isAr ? "صورة الهوية / الإقامة" : "ID / Iqama Image"} icon={<IdCard />} />
-          <UploadBox label={isAr ? "صورة رخصة القيادة" : "Driving License Image"} icon={<FileText />} />
-          <UploadBox label={isAr ? "صورة المندوب" : "Employee Photo"} icon={<ImageIcon />} />
-          <UploadBox label={isAr ? "عقد قوى" : "Qiwa Contract"} icon={<FileText />} />
-          <UploadBox label={isAr ? "عهدة استلام مركبة" : "Vehicle Custody Form"} icon={<FileText />} />
-          <UploadBox label={isAr ? "مستندات أخرى" : "Other Documents"} icon={<Upload />} />
+          <UploadBox label={isAr ? "صورة الموظف" : "Employee Photo"} currentUrl={form.photoUrl} file={docs.employeeImage} onChange={(file) => updateDoc("employeeImage", file)} icon={<ImageIcon />} isAr={isAr} />
+          <UploadBox label={isAr ? "صورة الهوية / الإقامة" : "ID / Iqama Image"} currentUrl={form.iqamaFileUrl} file={docs.idImage} onChange={(file) => updateDoc("idImage", file)} icon={<IdCard />} isAr={isAr} />
+          <UploadBox label={isAr ? "صورة رخصة القيادة" : "Driving License Image"} currentUrl={form.licenseFileUrl} file={docs.licenseImage} onChange={(file) => updateDoc("licenseImage", file)} icon={<FileText />} isAr={isAr} />
+          <UploadBox label={isAr ? "عقد قوى" : "Qiwa Contract"} currentUrl={form.qiwaFileUrl} file={docs.qiwaContract} onChange={(file) => updateDoc("qiwaContract", file)} icon={<FileText />} isAr={isAr} />
+          <UploadBox label={isAr ? "عهدة استلام مركبة" : "Vehicle Custody Form"} currentUrl={form.custodyFileUrl} file={docs.vehicleCustody} onChange={(file) => updateDoc("vehicleCustody", file)} icon={<FileText />} isAr={isAr} />
+          <UploadBox label={isAr ? "مستندات أخرى" : "Other Documents"} currentUrl={form.otherDocsUrl} file={docs.otherDocs} onChange={(file) => updateDoc("otherDocs", file)} icon={<Upload />} isAr={isAr} />
         </div>
+      </Section>
+
+      <Section title={isAr ? "ملاحظات" : "Notes"} icon={<FileText />}>
+        <textarea
+          value={form.notes}
+          onChange={(e) => updateField("notes", e.target.value)}
+          className="min-h-32 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+          placeholder={isAr ? "اكتب الملاحظات..." : "Write notes..."}
+        />
       </Section>
 
       <div className="mt-6 flex justify-end gap-3">
         <Link
-          href="/employees/list"
+          href={`/employees/${employeeId}`}
           className="rounded-2xl border border-slate-200 bg-white px-6 py-3 text-sm font-extrabold text-slate-700 hover:bg-slate-50"
         >
           {isAr ? "إلغاء" : "Cancel"}
         </Link>
 
         <button
-          onClick={() => alert(isAr ? "تم حفظ التعديلات مؤقتًا" : "Changes saved temporarily")}
-          className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-extrabold text-white hover:bg-blue-700"
+          onClick={saveEmployee}
+          disabled={saving}
+          className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-6 py-3 text-sm font-extrabold text-white hover:bg-blue-700 disabled:opacity-60"
         >
           <Save className="h-5 w-5" />
-          {isAr ? "حفظ التعديلات" : "Save Changes"}
+          {saving ? (isAr ? "جاري الحفظ..." : "Saving...") : isAr ? "حفظ التعديلات" : "Save Changes"}
         </button>
       </div>
     </>
   );
 }
 
-function Section({ title, icon, children }: any) {
+function jobOptions(isAr: boolean): Option[] {
+  return [
+    {
+      value: "deliveryCourier",
+      label: isAr ? "مندوب توصيل" : "Delivery Courier",
+    },
+    { value: "supervisor", label: isAr ? "مشرف" : "Supervisor" },
+    { value: "mechanic", label: isAr ? "ميكانيكي" : "Mechanic" },
+    {
+      value: "maintenanceOfficer",
+      label: isAr ? "مسؤول الصيانة" : "Maintenance Officer",
+    },
+  ];
+}
+
+function locationOptions(isAr: boolean, jobTitle: string): Option[] {
+  if (jobTitle === "deliveryCourier") {
+    return [
+      { value: "Keeta", label: "Keeta" },
+      { value: "HungerStation", label: "HungerStation" },
+      {
+        value: "KeetaAndHungerStation",
+        label: isAr ? "كيتا وهنجرستيشن معًا" : "Keeta & HungerStation",
+      },
+    ];
+  }
+
+  if (jobTitle === "supervisor") {
+    return [
+      { value: "management", label: isAr ? "الإدارة" : "Management" },
+    ];
+  }
+
+  return [
+    { value: "maintenance", label: isAr ? "الصيانة" : "Maintenance" },
+  ];
+}
+
+function statusOptions(isAr: boolean): Option[] {
+  return [
+    { value: "active", label: isAr ? "نشط" : "Active" },
+    { value: "stopped", label: isAr ? "متوقف" : "Stopped" },
+    { value: "vacation", label: isAr ? "إجازة" : "Vacation" },
+    { value: "outOfService", label: isAr ? "خارج الخدمة" : "Out Of Service" },
+  ];
+}
+
+function performanceOptions(isAr: boolean): Option[] {
+  return [
+    { value: "excellent", label: isAr ? "ممتاز" : "Excellent" },
+    { value: "good", label: isAr ? "جيد" : "Good" },
+    { value: "average", label: isAr ? "متوسط" : "Average" },
+    { value: "weak", label: isAr ? "ضعيف" : "Poor" },
+  ];
+}
+
+function Section({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="mb-6 rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="mb-6 flex items-center justify-between border-b border-slate-100 pb-4">
@@ -159,45 +529,122 @@ function Section({ title, icon, children }: any) {
   );
 }
 
-function Input({ label, defaultValue = "", type = "text" }: any) {
+function Input({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+}) {
   return (
     <label className="space-y-2">
       <span className="text-sm font-extrabold text-slate-600">{label}</span>
       <input
         type={type}
-        defaultValue={defaultValue}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
         className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
       />
     </label>
   );
 }
 
-function Select({ label, options }: any) {
+function Select({
+  label,
+  value,
+  onChange,
+  options,
+  disabled = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: Option[];
+  disabled?: boolean;
+}) {
   return (
     <label className="space-y-2">
       <span className="text-sm font-extrabold text-slate-600">{label}</span>
-      <select className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-500">
-        {options.map((option: string) => (
-          <option key={option}>{option}</option>
+      <select
+        value={value}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+      >
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
         ))}
       </select>
     </label>
   );
 }
 
-function UploadBox({ label, icon }: any) {
+function UploadBox({
+  label,
+  currentUrl,
+  file,
+  onChange,
+  icon,
+  isAr,
+}: {
+  label: string;
+  currentUrl: string;
+  file: File | null;
+  onChange: (file: File | null) => void;
+  icon: React.ReactNode;
+  isAr: boolean;
+}) {
   return (
-    <label className="cursor-pointer rounded-3xl border border-dashed border-blue-300 bg-blue-50/30 p-5 transition hover:bg-blue-50">
-      <input type="file" className="hidden" />
-      <div className="flex items-center gap-4">
+    <div className="rounded-3xl border border-dashed border-blue-300 bg-blue-50/30 p-5">
+      <div className="mb-4 flex items-center gap-4">
         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-blue-700 shadow-sm">
           {icon}
         </div>
         <div>
           <p className="font-extrabold text-[#0f2544]">{label}</p>
-          <p className="mt-1 text-xs font-bold text-slate-500">PNG, JPG, PDF</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">
+            {file ? file.name : "PNG, JPG, PDF"}
+          </p>
         </div>
       </div>
-    </label>
+
+      <div className="flex flex-wrap gap-2">
+        {currentUrl && (
+          <a
+            href={currentUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-xs font-extrabold text-green-700 hover:bg-green-100"
+          >
+            {isAr ? "عرض الحالي" : "View Current"}
+          </a>
+        )}
+
+        <label className="cursor-pointer rounded-xl bg-blue-600 px-3 py-2 text-xs font-extrabold text-white hover:bg-blue-700">
+          {isAr ? "تغيير الملف" : "Change File"}
+          <input
+            type="file"
+            className="hidden"
+            onChange={(e) => onChange(e.target.files?.[0] || null)}
+          />
+        </label>
+
+        {file && (
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-extrabold text-red-700 hover:bg-red-100"
+          >
+            {isAr ? "إلغاء الاختيار" : "Remove Selection"}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
