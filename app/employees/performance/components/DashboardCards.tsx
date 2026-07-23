@@ -39,14 +39,22 @@ export default function DashboardCards({
           <Kpi title={isArabic ? "إجمالي الطلبات" : "Total Deliveries"} value={hungerStats.totalDeliveries.toLocaleString()} icon={<BarChart3 />} />
           <Kpi title={isArabic ? "متوسط الحضور" : "Average Attendance"} value={`${hungerStats.avgAttendance}%`} icon={<CheckCircle2 />} />
           <Kpi title={isArabic ? "متوسط القبول" : "Average Acceptance"} value={`${hungerStats.avgAcceptance}%`} icon={<Medal />} />
-          <Kpi title={isArabic ? "إجمالي ساعات العمل" : "Total Working Hours"} value={String(hungerStats.totalHours)} icon={<Clock />} />
-          <Kpi title={isArabic ? "إجمالي الكيلومترات" : "Total KM"} value={hungerStats.totalKm.toLocaleString()} icon={<Route />} />
-          <Kpi title={isArabic ? "الكيلومترات المستحقة" : "Payable KM"} value={hungerStats.payableKm.toLocaleString()} icon={<MapPinned />} />
-          <Kpi title={isArabic ? "إجمالي مكافأة الجودة" : "Total Quality Bonus"} value={`${hungerStats.totalBonus.toFixed(0)} SAR`} icon={<Wallet />} />
+          <Kpi title={isArabic ? "إجمالي ساعات العمل" : "Total Working Hours"} value={formatNumber(hungerStats.totalHours)} icon={<Clock />}/>
+          <Kpi title={isArabic ? "إجمالي الكيلومترات" : "Total KM"} value={formatNumber(hungerStats.totalKm)} icon={<Route />} />
+           <Kpi title={isArabic ? "الكيلومترات المستحقة" : "Payable KM"} value={formatNumber(hungerStats.payableKm)} icon={<MapPinned />}/>
+          <Kpi title={isArabic ? "إجمالي مكافأة الجودة" : "Total Quality Bonus"} value={`${formatNumber(hungerStats.totalBonus)} SAR`} icon={<Wallet />}/>
         </div>
       </section>
     );
   }
+  function formatNumber(value: number | string | null | undefined) {
+  const number = Number(value ?? 0);
+
+  return number.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
 
   return (
     <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">

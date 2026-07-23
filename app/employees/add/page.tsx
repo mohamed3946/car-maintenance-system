@@ -21,6 +21,7 @@ type FormData = {
   name: string;
   iqama: string;
   phone: string;
+  email: string;
   nationality: string;
   jobTitle: string;
   workLocation: string;
@@ -32,7 +33,8 @@ type FormData = {
   halfTarget: string;
   targetDeductions: string;
   vehicleNumber: string;
-  platformId: string;
+  keetaId: string;
+  hungerId: string;
   notes: string;
 };
 
@@ -73,8 +75,9 @@ function AddEmployeeContent() {
     name: "",
     iqama: "",
     phone: "",
+    email: "",
     nationality: "",
-    jobTitle: "keetaCourier",
+    jobTitle: "deliveryCourier",
     workLocation: "Keeta",
     status: "active",
     performance: "good",
@@ -84,7 +87,8 @@ function AddEmployeeContent() {
     halfTarget: "",
     targetDeductions: "",
     vehicleNumber: "",
-    platformId: "",
+    keetaId: "",
+    hungerId: "",
     notes: "",
   });
 
@@ -98,10 +102,9 @@ function AddEmployeeContent() {
   });
 
   const jobOptions: SelectOption[] = [
-    { value: "keetaCourier", label: isAr ? "مندوب كيتا" : "Keeta Courier" },
     {
-      value: "hungerCourier",
-      label: isAr ? "مندوب هنجرستيشن" : "HungerStation Courier",
+      value: "deliveryCourier",
+      label: isAr ? "مندوب توصيل" : "Delivery Courier",
     },
     { value: "supervisor", label: isAr ? "مشرف" : "Supervisor" },
     { value: "mechanic", label: isAr ? "ميكانيكي" : "Mechanic" },
@@ -111,12 +114,24 @@ function AddEmployeeContent() {
     },
   ];
 
-  const workLocationOptions: SelectOption[] = [
-    { value: "Keeta", label: "Keeta" },
-    { value: "HungerStation", label: "HungerStation" },
-    { value: "management", label: isAr ? "الإدارة" : "Management" },
-    { value: "maintenance", label: isAr ? "الصيانة" : "Maintenance" },
-  ];
+  const workLocationOptions: SelectOption[] =
+    form.jobTitle === "deliveryCourier"
+      ? [
+          { value: "Keeta", label: "Keeta" },
+          { value: "HungerStation", label: "HungerStation" },
+          {
+            value: "KeetaAndHungerStation",
+            label: isAr ? "كيتا وهنجرستيشن معًا" : "Keeta & HungerStation",
+          },
+        ]
+      : form.jobTitle === "supervisor"
+        ? [{ value: "management", label: isAr ? "الإدارة" : "Management" }]
+        : [
+            {
+              value: "maintenance",
+              label: isAr ? "الصيانة" : "Maintenance",
+            },
+          ];
 
   const statusOptions: SelectOption[] = [
     { value: "active", label: isAr ? "نشط" : "Active" },
@@ -133,43 +148,48 @@ function AddEmployeeContent() {
   ];
 
   const isCourier = useMemo(() => {
-    return form.jobTitle === "keetaCourier" || form.jobTitle === "hungerCourier";
+    return form.jobTitle === "deliveryCourier";
   }, [form.jobTitle]);
 
-  const showPlatformId =
-    form.jobTitle === "keetaCourier" || form.jobTitle === "hungerCourier";
+  const showKeetaId =
+    form.jobTitle === "deliveryCourier" &&
+    (form.workLocation === "Keeta" ||
+      form.workLocation === "KeetaAndHungerStation");
 
-  const platformIdLabel =
-    form.jobTitle === "keetaCourier"
-      ? isAr
-        ? "رقم ID كيتا"
-        : "Keeta ID"
-      : isAr
-        ? "رقم ID هنجرستيشن"
-        : "HungerStation ID";
+  const showHungerId =
+    form.jobTitle === "deliveryCourier" &&
+    (form.workLocation === "HungerStation" ||
+      form.workLocation === "KeetaAndHungerStation");
 
   function updateField(key: keyof FormData, value: string) {
     if (key === "jobTitle") {
       let nextWorkLocation = form.workLocation;
-      let nextPlatformId = form.platformId;
 
-      if (value === "keetaCourier") {
+      if (value === "deliveryCourier") {
         nextWorkLocation = "Keeta";
-      } else if (value === "hungerCourier") {
-        nextWorkLocation = "HungerStation";
       } else if (value === "supervisor") {
         nextWorkLocation = "management";
-        nextPlatformId = "";
       } else if (value === "mechanic" || value === "maintenanceOfficer") {
         nextWorkLocation = "maintenance";
-        nextPlatformId = "";
       }
 
       setForm((prev) => ({
         ...prev,
         jobTitle: value,
         workLocation: nextWorkLocation,
-        platformId: nextPlatformId,
+      }));
+
+      return;
+    }
+
+    if (key === "workLocation") {
+      setForm((prev) => ({
+        ...prev,
+        workLocation: value,
+        keetaId:
+          value === "HungerStation" ? "" : prev.keetaId,
+        hungerId:
+          value === "Keeta" ? "" : prev.hungerId,
       }));
 
       return;
@@ -191,16 +211,10 @@ function AddEmployeeContent() {
     const employees = rows.map((row) => {
       const jobTitleRaw = String(row["Job Title"] || "").toLowerCase();
 
-      let jobTitle = "keetaCourier";
+      let jobTitle = "deliveryCourier";
       let workLocation = "Keeta";
 
-      if (jobTitleRaw.includes("hunger")) {
-        jobTitle = "hungerCourier";
-        workLocation = "HungerStation";
-      } else if (jobTitleRaw.includes("keeta")) {
-        jobTitle = "keetaCourier";
-        workLocation = "Keeta";
-      } else if (jobTitleRaw.includes("supervisor")) {
+      if (jobTitleRaw.includes("supervisor")) {
         jobTitle = "supervisor";
         workLocation = "management";
       } else if (jobTitleRaw.includes("mechanic")) {
@@ -213,10 +227,21 @@ function AddEmployeeContent() {
         ? String(row["HungerStation ID"]).trim()
         : null;
 
+      if (jobTitle === "deliveryCourier") {
+        if (keetaId && hungerId) {
+          workLocation = "KeetaAndHungerStation";
+        } else if (hungerId) {
+          workLocation = "HungerStation";
+        } else {
+          workLocation = "Keeta";
+        }
+      }
+
       return {
         name: String(row["Employee Name"] || "").trim(),
         iqama: String(row["Iqama Number"] || "").trim(),
         phone: row["Phone"] ? String(row["Phone"]).trim() : null,
+        email: row["Email"] ? String(row["Email"]).trim() : null,
         nationality: row["Nationality"] ? String(row["Nationality"]).trim() : null,
         job_title: jobTitle,
         work_location: workLocation,
@@ -293,9 +318,16 @@ function AddEmployeeContent() {
       return;
     }
 
-    if (showPlatformId && !form.platformId.trim()) {
-      alert(isAr ? `اكتب ${platformIdLabel}` : `Enter ${platformIdLabel}`);
-      return;
+    if (form.jobTitle === "deliveryCourier") {
+      if (showKeetaId && !form.keetaId.trim()) {
+        alert(isAr ? "اكتب رقم ID كيتا" : "Enter Keeta ID");
+        return;
+      }
+
+      if (showHungerId && !form.hungerId.trim()) {
+        alert(isAr ? "اكتب رقم ID هنجرستيشن" : "Enter HungerStation ID");
+        return;
+      }
     }
 
     setSaving(true);
@@ -304,6 +336,7 @@ function AddEmployeeContent() {
       name: form.name.trim(),
       iqama: form.iqama.trim(),
       phone: form.phone || null,
+      email: form.email.trim() || null,
       nationality: form.nationality || null,
       job_title: form.jobTitle,
       work_location: form.workLocation,
@@ -315,9 +348,12 @@ function AddEmployeeContent() {
       half_target: form.halfTarget ? Number(form.halfTarget) : null,
       target_deductions: form.targetDeductions ? Number(form.targetDeductions) : null,
       vehicle_number: form.vehicleNumber || null,
-      platform_id: showPlatformId ? form.platformId.trim() : null,
-      keeta_id: form.jobTitle === "keetaCourier" ? form.platformId.trim() : null,
-      hunger_id: form.jobTitle === "hungerCourier" ? form.platformId.trim() : null,
+      platform_id:
+        (showKeetaId ? form.keetaId.trim() : "") ||
+        (showHungerId ? form.hungerId.trim() : "") ||
+        null,
+      keeta_id: showKeetaId ? form.keetaId.trim() || null : null,
+      hunger_id: showHungerId ? form.hungerId.trim() || null : null,
       notes: form.notes || null,
     };
 
@@ -448,6 +484,7 @@ function AddEmployeeContent() {
           <Input label={isAr ? "اسم الموظف" : "Employee Name"} value={form.name} onChange={(v) => updateField("name", v)} required />
           <Input label={isAr ? "رقم الإقامة" : "Iqama Number"} value={form.iqama} onChange={(v) => updateField("iqama", v)} required />
           <Input label={isAr ? "رقم الجوال" : "Phone"} value={form.phone} onChange={(v) => updateField("phone", v)} />
+          <Input label={isAr ? "البريد الإلكتروني" : "Email"} type="email" value={form.email} onChange={(v) => updateField("email", v)} />
           <Input label={isAr ? "الجنسية" : "Nationality"} value={form.nationality} onChange={(v) => updateField("nationality", v)} />
           <Input label={isAr ? "تاريخ بداية العمل - اختياري" : "Start Date - Optional"} type="date" value={form.startDate} onChange={(v) => updateField("startDate", v)} />
         </div>
@@ -460,7 +497,7 @@ function AddEmployeeContent() {
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           <Select label={isAr ? "المسمى الوظيفي" : "Job Title"} value={form.jobTitle} onChange={(v) => updateField("jobTitle", v)} options={jobOptions} />
 
-          <Select label={isAr ? "موقع العمل" : "Work Location"} value={form.workLocation} onChange={(v) => updateField("workLocation", v)} options={workLocationOptions} disabled />
+          <Select label={isAr ? "موقع العمل" : "Work Location"} value={form.workLocation} onChange={(v) => updateField("workLocation", v)} options={workLocationOptions} />
 
           <Select label={isAr ? "الحالة" : "Status"} value={form.status} onChange={(v) => updateField("status", v)} options={statusOptions} />
 
@@ -468,11 +505,20 @@ function AddEmployeeContent() {
 
           <Input label={isAr ? "رقم المركبة / الدباب" : "Vehicle Number"} value={form.vehicleNumber} onChange={(v) => updateField("vehicleNumber", v)} />
 
-          {showPlatformId && (
+          {showKeetaId && (
             <Input
-              label={platformIdLabel}
-              value={form.platformId}
-              onChange={(v) => updateField("platformId", v)}
+              label={isAr ? "رقم ID كيتا" : "Keeta ID"}
+              value={form.keetaId}
+              onChange={(v) => updateField("keetaId", v)}
+              required
+            />
+          )}
+
+          {showHungerId && (
+            <Input
+              label={isAr ? "رقم ID هنجرستيشن" : "HungerStation ID"}
+              value={form.hungerId}
+              onChange={(v) => updateField("hungerId", v)}
               required
             />
           )}

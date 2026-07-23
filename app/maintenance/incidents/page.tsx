@@ -594,7 +594,7 @@ function IncidentContent() {
         <StatCard icon={<Ban />} title={tx.stoppedVehicles} value="0" note={lang === "ar" ? "مركبة" : "Vehicle"} color="red" />
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-2">
+      <div className="mt-6 grid min-w-0 grid-cols-1 gap-6 2xl:grid-cols-2">
         <form
           onSubmit={handleSubmit}
           className="no-print rounded-3xl border border-slate-200 bg-white p-5 shadow-sm"

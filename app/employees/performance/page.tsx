@@ -75,7 +75,9 @@ function PerformanceContent() {
 
     if (error) {
       console.error(error);
-      alert(isArabic ? "فشل تحميل بيانات الأداء" : "Failed to load performance data");
+      alert(
+        isArabic ? "فشل تحميل بيانات الأداء" : "Failed to load performance data"
+      );
     } else {
       setRecords((data || []) as PerformanceRecord[]);
     }
@@ -141,6 +143,30 @@ function PerformanceContent() {
     [records]
   );
 
+  const topHungerRiders = useMemo(() => {
+    return [...hungerRows]
+      .sort((a, b) => {
+        if (a.batchNumber !== b.batchNumber) {
+          return a.batchNumber - b.batchNumber;
+        }
+
+        return b.completedDeliveries - a.completedDeliveries;
+      })
+      .slice(0, 5);
+  }, [hungerRows]);
+
+  const weakHungerRiders = useMemo(() => {
+    return [...hungerRows]
+      .sort((a, b) => {
+        if (a.batchNumber !== b.batchNumber) {
+          return b.batchNumber - a.batchNumber;
+        }
+
+        return a.completedDeliveries - b.completedDeliveries;
+      })
+      .slice(0, 5);
+  }, [hungerRows]);
+
   const text = {
     rider: isArabic ? "المندوب" : "Rider",
     batchNumber: "Batch Number",
@@ -169,14 +195,22 @@ function PerformanceContent() {
 
   const hungerStats = useMemo(() => {
     const totalRiders = hungerRows.length || 1;
-    const totalDeliveries = hungerRows.reduce((sum, r) => sum + r.completedDeliveries, 0);
-    const avgAttendance = Math.round(hungerRows.reduce((sum, r) => sum + r.attendanceRate, 0) / totalRiders);
-    const avgAcceptance = Math.round(hungerRows.reduce((sum, r) => sum + r.acceptanceRate, 0) / totalRiders);
+    const totalDeliveries = hungerRows.reduce(
+      (sum, r) => sum + r.completedDeliveries,
+      0
+    );
+    const avgAttendance = Math.round(
+      hungerRows.reduce((sum, r) => sum + r.attendanceRate, 0) / totalRiders
+    );
+    const avgAcceptance = Math.round(
+      hungerRows.reduce((sum, r) => sum + r.acceptanceRate, 0) / totalRiders
+    );
     const totalHours = hungerRows.reduce((sum, r) => sum + r.workingHours, 0);
     const totalKm = hungerRows.reduce((sum, r) => sum + r.totalKm, 0);
     const payableKm = hungerRows.reduce((sum, r) => sum + r.payableKm, 0);
     const totalBonus = hungerRows.reduce(
-      (sum, r) => sum + r.completedDeliveries * qualityBonusByBatch(r.batchNumber),
+      (sum, r) =>
+        sum + r.completedDeliveries * qualityBonusByBatch(r.batchNumber),
       0
     );
 
@@ -197,8 +231,12 @@ function PerformanceContent() {
     const totalOrders = keetaRows.reduce((sum, r) => sum + r.orders, 0);
     const valid = keetaRows.filter((r) => r.status === "valid").length;
     const invalid = keetaRows.length - valid;
-    const avgOnTime = Math.round(keetaRows.reduce((sum, r) => sum + r.onTime, 0) / totalRiders);
-    const avgAcceptance = Math.round(keetaRows.reduce((sum, r) => sum + r.acceptance, 0) / totalRiders);
+    const avgOnTime = Math.round(
+      keetaRows.reduce((sum, r) => sum + r.onTime, 0) / totalRiders
+    );
+    const avgAcceptance = Math.round(
+      keetaRows.reduce((sum, r) => sum + r.acceptance, 0) / totalRiders
+    );
 
     return {
       totalRiders: keetaRows.length,
@@ -254,15 +292,11 @@ function PerformanceContent() {
 
           <div className="grid gap-5 xl:grid-cols-2">
             <Card title={text.topRiders}>
-              <HungerMiniTable rows={hungerRows.slice(0, 3)} />
+              <HungerMiniTable rows={topHungerRiders} />
             </Card>
 
             <Card title={text.weakRiders} danger>
-              <HungerMiniTable
-                rows={[...hungerRows]
-                  .sort((a, b) => b.noShowPercent - a.noShowPercent)
-                  .slice(0, 3)}
-              />
+              <HungerMiniTable rows={weakHungerRiders} />
             </Card>
           </div>
 

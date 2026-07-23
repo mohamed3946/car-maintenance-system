@@ -19,7 +19,13 @@
       }
     ],
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      "@/config/*": ["./src/config/*"],
+      "@/core/*": ["./src/core/*"],
+      "@/modules/*": ["./src/modules/*"],
+      "@/providers/*": ["./src/providers/*"],
+      "@/shared/*": ["./src/shared/*"],
+      "@/ui/*": ["./src/ui/*"]
     }
   },
   "include": [
@@ -28,7 +34,9 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
-, "locales/en", "locales/ar"  ],
+    "**/*.mts",
+    "locales/en",
+    "locales/ar"
+  ],
   "exclude": ["node_modules"]
 }

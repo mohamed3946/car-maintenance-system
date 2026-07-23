@@ -20,6 +20,7 @@ type FormData = {
   name: string;
   iqama: string;
   phone: string;
+  email: string;
   nationality: string;
   jobTitle: string;
   workLocation: string;
@@ -31,7 +32,8 @@ type FormData = {
   halfTarget: string;
   targetDeductions: string;
   vehicleNumber: string;
-  platformId: string;
+  keetaId: string;
+  hungerId: string;
   notes: string;
   photoUrl: string;
   iqamaFileUrl: string;
@@ -86,8 +88,9 @@ function EditEmployeeContent() {
     name: "",
     iqama: "",
     phone: "",
+    email: "",
     nationality: "",
-    jobTitle: "keetaCourier",
+    jobTitle: "deliveryCourier",
     workLocation: "Keeta",
     status: "active",
     performance: "good",
@@ -97,7 +100,8 @@ function EditEmployeeContent() {
     halfTarget: "",
     targetDeductions: "",
     vehicleNumber: "",
-    platformId: "",
+    keetaId: "",
+    hungerId: "",
     notes: "",
     photoUrl: "",
     iqamaFileUrl: "",
@@ -107,8 +111,17 @@ function EditEmployeeContent() {
     otherDocsUrl: "",
   });
 
-  const showPlatformId =
-    form.jobTitle === "keetaCourier" || form.jobTitle === "hungerCourier";
+  const isCourier = form.jobTitle === "deliveryCourier";
+
+  const showKeetaId =
+    isCourier &&
+    (form.workLocation === "Keeta" ||
+      form.workLocation === "KeetaAndHungerStation");
+
+  const showHungerId =
+    isCourier &&
+    (form.workLocation === "HungerStation" ||
+      form.workLocation === "KeetaAndHungerStation");
 
   useEffect(() => {
     loadEmployee();
@@ -134,9 +147,24 @@ function EditEmployeeContent() {
       name: data.name || "",
       iqama: data.iqama || "",
       phone: data.phone || "",
+      email: data.email || "",
       nationality: data.nationality || "",
-      jobTitle: data.job_title || "keetaCourier",
-      workLocation: data.work_location || "Keeta",
+      jobTitle:
+        data.job_title === "keetaCourier" ||
+        data.job_title === "hungerCourier" ||
+        data.job_title === "deliveryCourier"
+          ? "deliveryCourier"
+          : data.job_title || "deliveryCourier",
+      workLocation:
+        data.keeta_id && data.hunger_id
+          ? "KeetaAndHungerStation"
+          : data.hunger_id
+            ? "HungerStation"
+            : data.keeta_id
+              ? "Keeta"
+              : data.work_location === "KeetaAndHungerStation"
+                ? "KeetaAndHungerStation"
+                : data.work_location || "Keeta",
       status: data.status || "active",
       performance: data.performance || "good",
       startDate: data.start_date || "",
@@ -145,7 +173,8 @@ function EditEmployeeContent() {
       halfTarget: data.half_target ? String(data.half_target) : "",
       targetDeductions: data.target_deductions ? String(data.target_deductions) : "",
       vehicleNumber: data.vehicle_number || "",
-      platformId: data.platform_id || data.keeta_id || data.hunger_id || "",
+      keetaId: data.keeta_id || (data.job_title === "keetaCourier" ? data.platform_id : "") || "",
+      hungerId: data.hunger_id || (data.job_title === "hungerCourier" ? data.platform_id : "") || "",
       notes: data.notes || "",
       photoUrl: data.photo_url || "",
       iqamaFileUrl: data.iqama_file_url || "",
@@ -161,25 +190,34 @@ function EditEmployeeContent() {
   function updateField(key: keyof FormData, value: string) {
     if (key === "jobTitle") {
       let nextWorkLocation = form.workLocation;
-      let nextPlatformId = form.platformId;
 
-      if (value === "keetaCourier") {
-        nextWorkLocation = "Keeta";
-      } else if (value === "hungerCourier") {
-        nextWorkLocation = "HungerStation";
+      if (value === "deliveryCourier") {
+        if (
+          !["Keeta", "HungerStation", "KeetaAndHungerStation"].includes(
+            nextWorkLocation
+          )
+        ) {
+          nextWorkLocation = "Keeta";
+        }
       } else if (value === "supervisor") {
         nextWorkLocation = "management";
-        nextPlatformId = "";
       } else if (value === "mechanic" || value === "maintenanceOfficer") {
         nextWorkLocation = "maintenance";
-        nextPlatformId = "";
       }
 
       setForm((prev) => ({
         ...prev,
         jobTitle: value,
         workLocation: nextWorkLocation,
-        platformId: nextPlatformId,
+      }));
+
+      return;
+    }
+
+    if (key === "workLocation") {
+      setForm((prev) => ({
+        ...prev,
+        workLocation: value,
       }));
 
       return;
@@ -228,8 +266,13 @@ function EditEmployeeContent() {
       return;
     }
 
-    if (showPlatformId && !form.platformId.trim()) {
-      alert(isAr ? "اكتب رقم ID المنصة" : "Enter platform ID");
+    if (isCourier && showKeetaId && !form.keetaId.trim()) {
+      alert(isAr ? "اكتب رقم ID كيتا" : "Enter Keeta ID");
+      return;
+    }
+
+    if (isCourier && showHungerId && !form.hungerId.trim()) {
+      alert(isAr ? "اكتب رقم ID هنجرستيشن" : "Enter HungerStation ID");
       return;
     }
 
@@ -243,17 +286,13 @@ function EditEmployeeContent() {
       const custodyUrl = await uploadEmployeeFile(docs.vehicleCustody, "vehicle-custody");
       const otherDocsUrl = await uploadEmployeeFile(docs.otherDocs, "other-docs");
 
-      const platformId =
-        form.jobTitle === "keetaCourier" || form.jobTitle === "hungerCourier"
-          ? form.platformId.trim()
-          : null;
-
       const { error } = await supabase
         .from("employees")
         .update({
           name: form.name.trim(),
           iqama: form.iqama.trim(),
           phone: form.phone || null,
+          email: form.email.trim() || null,
           nationality: form.nationality || null,
           job_title: form.jobTitle,
           work_location: form.workLocation,
@@ -266,9 +305,12 @@ function EditEmployeeContent() {
           target_deductions: form.targetDeductions ? Number(form.targetDeductions) : null,
           vehicle_number: form.vehicleNumber || null,
 
-          platform_id: platformId,
-          keeta_id: form.jobTitle === "keetaCourier" ? form.platformId.trim() : null,
-          hunger_id: form.jobTitle === "hungerCourier" ? form.platformId.trim() : null,
+          platform_id:
+            (showKeetaId ? form.keetaId.trim() : "") ||
+            (showHungerId ? form.hungerId.trim() : "") ||
+            null,
+          keeta_id: showKeetaId ? form.keetaId.trim() || null : null,
+          hunger_id: showHungerId ? form.hungerId.trim() || null : null,
 
           notes: form.notes || null,
           photo_url: photoUrl || form.photoUrl || null,
@@ -334,6 +376,7 @@ function EditEmployeeContent() {
           <Input label={isAr ? "اسم الموظف" : "Employee Name"} value={form.name} onChange={(v) => updateField("name", v)} />
           <Input label={isAr ? "رقم الإقامة" : "Iqama Number"} value={form.iqama} onChange={(v) => updateField("iqama", v)} />
           <Input label={isAr ? "رقم الجوال" : "Phone Number"} value={form.phone} onChange={(v) => updateField("phone", v)} />
+          <Input label={isAr ? "البريد الإلكتروني" : "Email"} type="email" value={form.email} onChange={(v) => updateField("email", v)} />
           <Input label={isAr ? "الجنسية" : "Nationality"} value={form.nationality} onChange={(v) => updateField("nationality", v)} />
           <Input label={isAr ? "تاريخ بداية العمل" : "Start Date"} type="date" value={form.startDate} onChange={(v) => updateField("startDate", v)} />
         </div>
@@ -342,25 +385,25 @@ function EditEmployeeContent() {
       <Section title={isAr ? "بيانات العمل" : "Work Information"} icon={<FileText />}>
         <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           <Select label={isAr ? "المسمى الوظيفي" : "Job Title"} value={form.jobTitle} onChange={(v) => updateField("jobTitle", v)} options={jobOptions(isAr)} />
-          <Select label={isAr ? "موقع العمل" : "Work Location"} value={form.workLocation} onChange={(v) => updateField("workLocation", v)} options={locationOptions(isAr)} disabled />
+          <Select label={isAr ? "موقع العمل" : "Work Location"} value={form.workLocation} onChange={(v) => updateField("workLocation", v)} options={locationOptions(isAr, form.jobTitle)} />
           <Select label={isAr ? "الحالة" : "Status"} value={form.status} onChange={(v) => updateField("status", v)} options={statusOptions(isAr)} />
           <Select label={isAr ? "الأداء" : "Performance"} value={form.performance} onChange={(v) => updateField("performance", v)} options={performanceOptions(isAr)} />
 
           <Input label={isAr ? "رقم المركبة / الدباب" : "Vehicle Number"} value={form.vehicleNumber} onChange={(v) => updateField("vehicleNumber", v)} />
 
-          {showPlatformId && (
+          {showKeetaId && (
             <Input
-              label={
-                form.jobTitle === "keetaCourier"
-                  ? isAr
-                    ? "رقم ID كيتا"
-                    : "Keeta ID"
-                  : isAr
-                    ? "رقم ID هنجرستيشن"
-                    : "HungerStation ID"
-              }
-              value={form.platformId}
-              onChange={(v) => updateField("platformId", v)}
+              label={isAr ? "رقم ID كيتا" : "Keeta ID"}
+              value={form.keetaId}
+              onChange={(v) => updateField("keetaId", v)}
+            />
+          )}
+
+          {showHungerId && (
+            <Input
+              label={isAr ? "رقم ID هنجرستيشن" : "HungerStation ID"}
+              value={form.hungerId}
+              onChange={(v) => updateField("hungerId", v)}
             />
           )}
         </div>
@@ -418,19 +461,38 @@ function EditEmployeeContent() {
 
 function jobOptions(isAr: boolean): Option[] {
   return [
-    { value: "keetaCourier", label: isAr ? "مندوب كيتا" : "Keeta Courier" },
-    { value: "hungerCourier", label: isAr ? "مندوب هنجرستيشن" : "HungerStation Courier" },
+    {
+      value: "deliveryCourier",
+      label: isAr ? "مندوب توصيل" : "Delivery Courier",
+    },
     { value: "supervisor", label: isAr ? "مشرف" : "Supervisor" },
     { value: "mechanic", label: isAr ? "ميكانيكي" : "Mechanic" },
-    { value: "maintenanceOfficer", label: isAr ? "مسؤول الصيانة" : "Maintenance Officer" },
+    {
+      value: "maintenanceOfficer",
+      label: isAr ? "مسؤول الصيانة" : "Maintenance Officer",
+    },
   ];
 }
 
-function locationOptions(isAr: boolean): Option[] {
+function locationOptions(isAr: boolean, jobTitle: string): Option[] {
+  if (jobTitle === "deliveryCourier") {
+    return [
+      { value: "Keeta", label: "Keeta" },
+      { value: "HungerStation", label: "HungerStation" },
+      {
+        value: "KeetaAndHungerStation",
+        label: isAr ? "كيتا وهنجرستيشن معًا" : "Keeta & HungerStation",
+      },
+    ];
+  }
+
+  if (jobTitle === "supervisor") {
+    return [
+      { value: "management", label: isAr ? "الإدارة" : "Management" },
+    ];
+  }
+
   return [
-    { value: "Keeta", label: "Keeta" },
-    { value: "HungerStation", label: "HungerStation" },
-    { value: "management", label: isAr ? "الإدارة" : "Management" },
     { value: "maintenance", label: isAr ? "الصيانة" : "Maintenance" },
   ];
 }
