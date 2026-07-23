@@ -1,0 +1,10 @@
+import MainLayout from "../../../../src/shared/layout/MainLayout";
+import ApplicationsPage from "../../../../src/features/apps/components/ApplicationsPage";
+
+export default function OperationsAppsPage() {
+  return (
+    <MainLayout>
+      <ApplicationsPage />
+    </MainLayout>
+  );
+}
