@@ -76,7 +76,7 @@ function AddOilChangeContent() {
   const [odometer, setOdometer] = useState("");
   const [oilQuantity, setOilQuantity] = useState("3.5");
   const [oilType, setOilType] = useState("10W-30");
-  const [filterChanged, setFilterChanged] = useState(ar ? "نعم" : "Yes");
+  const [filterChanged, setFilterChanged] = useState("yes");
   const [filterType, setFilterType] = useState(ar ? "أصلي" : "Original");
   const [notes, setNotes] = useState("");
 
@@ -134,7 +134,7 @@ function AddOilChangeContent() {
     setOilDate("");
     setOilQuantity("3.5");
     setOilType("10W-30");
-    setFilterChanged(ar ? "نعم" : "Yes");
+    setFilterChanged("yes");
     setFilterType(ar ? "أصلي" : "Original");
     setNotes("");
   }
@@ -158,10 +158,7 @@ function AddOilChangeContent() {
       oil_quantity: oilQuantity,
       oil_type: oilType,
       filter_changed: filterChanged,
-      filter_type:
-  filterChanged === "نعم" || filterChanged === "Yes"
-    ? filterType
-    : null,
+      filter_type: filterType,
       notes,
     };
 
@@ -188,55 +185,6 @@ function AddOilChangeContent() {
 
     setSaving(false);
   }
-  function getDistanceSincePrevious(record: OilRecord) {
-  if (!record.vehicle_id || !record.odometer) return null;
-
-  const vehicleRecords = records
-    .filter(
-      (item) =>
-        item.vehicle_id === record.vehicle_id &&
-        item.odometer &&
-        item.oil_date
-    )
-    .sort((a, b) => {
-      const dateA = new Date(
-        `${a.oil_date}T00:00:00`
-      ).getTime();
-
-      const dateB = new Date(
-        `${b.oil_date}T00:00:00`
-      ).getTime();
-
-      if (dateA !== dateB) {
-        return dateA - dateB;
-      }
-
-      return new Date(a.created_at || 0).getTime() -
-        new Date(b.created_at || 0).getTime();
-    });
-
-  const currentIndex = vehicleRecords.findIndex(
-    (item) => item.id === record.id
-  );
-
-  if (currentIndex <= 0) return null;
-
-  const previousRecord = vehicleRecords[currentIndex - 1];
-
-  const currentOdometer = Number(record.odometer);
-  const previousOdometer = Number(previousRecord.odometer);
-
-  if (
-    Number.isNaN(currentOdometer) ||
-    Number.isNaN(previousOdometer)
-  ) {
-    return null;
-  }
-
-  const distance = currentOdometer - previousOdometer;
-
-  return distance >= 0 ? distance : null;
-}
 
   function handleEdit(record: OilRecord) {
     setEditingId(record.id);
@@ -419,20 +367,11 @@ function AddOilChangeContent() {
               />
 
               <SelectField
-  label={ar ? "تم تغيير فلتر الزيت" : "Oil Filter Changed"}
-  value={filterChanged}
-  onChange={(e: any) => setFilterChanged(e.target.value)}
-  options={ar ? ["نعم", "لا"] : ["Yes", "No"]}
-/>
-
-{(filterChanged === "نعم" || filterChanged === "Yes") && (
-  <SelectField
-    label={ar ? "نوع الفلتر" : "Filter Type"}
-    value={filterType}
-    onChange={(e: any) => setFilterType(e.target.value)}
-    options={ar ? ["أصلي", "تجاري"] : ["Original", "Commercial"]}
-  />
-)}
+                label={ar ? "نوع الفلتر" : "Filter Type"}
+                value={filterType}
+                onChange={(e: any) => setFilterType(e.target.value)}
+                options={ar ? ["أصلي", "تجاري"] : ["Original", "Commercial"]}
+              />
             </div>
 
             <div className="mt-4">
@@ -513,10 +452,8 @@ function AddOilChangeContent() {
                 <TH>{ar ? "اللوحة" : "Plate"}</TH>
                 <TH>{ar ? "التاريخ" : "Date"}</TH>
                 <TH>{ar ? "العداد" : "Odometer"}</TH>
-                <TH>{ar ? "المسافة على الزيت" : "Distance on Oil"}</TH>
                 <TH>{ar ? "كمية الزيت" : "Quantity"}</TH>
                 <TH>{ar ? "نوع الزيت" : "Oil Type"}</TH>
-                <TH>{ar ? "تم تغيير الفلتر" : "Filter Changed"}</TH>
                 <TH>{ar ? "نوع الفلتر" : "Filter Type"}</TH>
                 <TH>{ar ? "إجراءات" : "Actions"}</TH>
               </tr>
@@ -525,7 +462,7 @@ function AddOilChangeContent() {
             <tbody>
               {filteredRecords.map((record) => {
                 const vehicle = getRecordVehicle(record);
-                const distanceOnOil = getDistanceSincePrevious(record);
+
                 return (
                   <tr key={record.id} className="border-t border-slate-100">
                     <td className="px-4 py-3 font-bold">
@@ -543,13 +480,6 @@ function AddOilChangeContent() {
                     <td className="px-4 py-3">
                       {record.odometer || "-"}
                     </td>
-                    <td className="px-4 py-3 font-bold">
-  {distanceOnOil !== null
-    ? `${distanceOnOil.toLocaleString()} KM`
-    : ar
-      ? "أول تغيير"
-      : "First Change"}
-</td>
 
                     <td className="px-4 py-3">
                       {record.oil_quantity || "-"}
@@ -558,25 +488,10 @@ function AddOilChangeContent() {
                     <td className="px-4 py-3">
                       {record.oil_type || "-"}
                     </td>
-                    <td className="px-4 py-3">
-  {record.filter_changed === "نعم" ||
-  record.filter_changed === "Yes" ||
-  record.filter_changed === "yes"
-    ? ar
-      ? "نعم"
-      : "Yes"
-    : ar
-      ? "لا"
-      : "No"}
-</td>
 
-<td className="px-4 py-3">
-  {record.filter_changed === "نعم" ||
-  record.filter_changed === "Yes" ||
-  record.filter_changed === "yes"
-    ? record.filter_type || "-"
-    : "-"}
-</td>
+                    <td className="px-4 py-3">
+                      {record.filter_type || "-"}
+                    </td>
 
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
