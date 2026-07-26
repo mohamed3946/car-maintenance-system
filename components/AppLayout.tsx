@@ -109,7 +109,7 @@ export default function AppLayout({
   return (
     <LanguageContext.Provider value={{ lang, t, dir }}>
       <main dir={dir} className="min-h-screen bg-[#f6f8fb] text-[#0f2544]">
-        <div className="flex min-h-screen">
+        <div className={`flex min-h-screen ${lang === "ar" ? "flex-row" : "flex-row"}`}>
           <aside className="sticky top-0 hidden h-screen w-[330px] flex-col justify-between overflow-hidden rounded-e-[34px] bg-gradient-to-b from-[#062b4f] via-[#042644] to-[#02182e] px-6 py-5 text-white shadow-2xl lg:flex">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_10%,rgba(45,120,255,0.22),transparent_35%),radial-gradient(circle_at_80%_65%,rgba(0,190,255,0.12),transparent_35%)]" />
 
@@ -181,7 +181,7 @@ export default function AppLayout({
             </div>
           </aside>
 
-          <section className="flex-1 p-6 lg:p-8">
+          <section className="min-w-0 flex-1 p-6 lg:p-8">
             <header className="mb-6 flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
               <div className="flex items-center gap-3">
                 <Menu className="h-6 w-6" />
@@ -266,45 +266,50 @@ function getSectionName(system: SystemType, lang: Lang, t: Translation) {
 }
 
 function getMenuItems(system: SystemType, lang: Lang, t: Translation) {
-  if (system === "employees") {
-    return [
-      {
-        name: t.dashboard || (lang === "ar" ? "لوحة التحكم" : "Dashboard"),
-        href: "/employees",
-        icon: <Home className="h-7 w-7" />,
-      },
-      {
-        name: t.employees || (lang === "ar" ? "الموظفون" : "Employees"),
-        href: "/employees/list",
-        icon: <Users className="h-7 w-7" />,
-      },
-      {
-        name: lang === "ar" ? "متابعة الأداء" : "Rules & Performance",
-        href: "/employees/performance",
-        icon: <ClipboardList className="h-7 w-7" />,
-      },
-      {
-        name: t.notifications || (lang === "ar" ? "الإشعارات والإنذارات" : "Notifications"),
-        href: "/employees/notices",
-        icon: <Bell className="h-7 w-7" />,
-      },
-      {
-        name: t.salaries || (lang === "ar" ? "الرواتب والمستحقات" : "Payroll"),
-        href: "/employees/payroll",
-        icon: <Wallet className="h-7 w-7" />,
-      },
-      {
-        name: t.reports || (lang === "ar" ? "التقارير" : "Reports"),
-        href: "/employees/reports",
-        icon: <FileText className="h-7 w-7" />,
-      },
-      {
-        name: t.settings || (lang === "ar" ? "الإعدادات" : "Settings"),
-        href: "/employees/settings",
-        icon: <Settings className="h-7 w-7" />,
-      },
-    ];
-  }
+ if (system === "employees") {
+  return [
+    {
+      name: t.dashboard || (lang === "ar" ? "لوحة التحكم" : "Dashboard"),
+      href: "/employees",
+      icon: <Home className="h-7 w-7" />,
+    },
+    {
+      name: t.employees || (lang === "ar" ? "الموظفون" : "Employees"),
+      href: "/employees/list",
+      icon: <Users className="h-7 w-7" />,
+    },
+    {
+      name: lang === "ar" ? "متابعة الأداء" : "Rules & Performance",
+      href: "/employees/performance",
+      icon: <ClipboardList className="h-7 w-7" />,
+    },
+    {
+      name: lang === "ar" ? "إدارة الكاش" : "Cash Management",
+      href: "/employees/cash-management",
+      icon: <Wallet className="h-7 w-7" />,
+    },
+    {
+      name: t.notifications || (lang === "ar" ? "الإشعارات والإنذارات" : "Notifications"),
+      href: "/employees/notices",
+      icon: <Bell className="h-7 w-7" />,
+    },
+    {
+      name: t.salaries || (lang === "ar" ? "الرواتب والمستحقات" : "Payroll"),
+      href: "/employees/payroll",
+      icon: <Wallet className="h-7 w-7" />,
+    },
+    {
+      name: t.reports || (lang === "ar" ? "التقارير" : "Reports"),
+      href: "/employees/reports",
+      icon: <FileText className="h-7 w-7" />,
+    },
+    {
+      name: t.settings || (lang === "ar" ? "الإعدادات" : "Settings"),
+      href: "/employees/settings",
+      icon: <Settings className="h-7 w-7" />,
+    },
+  ];
+}
 
   return [
     {
