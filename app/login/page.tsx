@@ -119,59 +119,59 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#eef5fc] px-6 py-6">
+    <main className="relative min-h-dvh overflow-x-hidden bg-[#eef5fc] px-3 py-3 sm:px-4 sm:py-4">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_12%_18%,#ffffff_0,transparent_32%),radial-gradient(circle_at_92%_86%,#d7e9fb_0,transparent_36%)]" />
 
       <section
         dir="ltr"
-        className="relative z-10 mx-auto grid h-[calc(100vh-48px)] min-h-[820px] w-full max-w-[1720px] overflow-hidden rounded-[32px] bg-white shadow-2xl shadow-blue-200/60 lg:grid-cols-[45%_55%]"
+        className="relative z-10 mx-auto grid min-h-[calc(100dvh-24px)] w-full max-w-[1720px] overflow-hidden rounded-[26px] bg-white shadow-2xl shadow-blue-200/60 sm:min-h-[calc(100dvh-32px)] lg:h-[calc(100dvh-32px)] lg:min-h-[620px] lg:grid-cols-[45%_55%]"
       >
-        <div dir="rtl" className="flex h-full items-center justify-center bg-white px-16 py-8">
-          <div className="w-full max-w-[600px]">
-            <div className="mb-9 text-center">
+        <div dir="rtl" className="flex h-full items-center justify-center bg-white px-6 py-5 sm:px-10 lg:px-12 lg:py-4 xl:px-14">
+          <div className="w-full max-w-[540px]">
+            <div className="mb-5 text-center">
               <Image
                 src="/logo.png"
                 alt="شعار نمو التوصيل"
-                width={295}
-                height={205}
+                width={220}
+                height={153}
                 priority
-                className="mx-auto h-auto w-[295px] object-contain"
+                className="mx-auto h-auto w-[190px] object-contain xl:w-[220px]"
               />
 
-              <h1 className="mt-9 text-[44px] font-black leading-none text-[#062b5f]">مرحبًا بك</h1>
-              <p className="mt-5 text-[19px] text-slate-600">تسجيل الدخول لنظام إدارة المؤسسة</p>
+              <h1 className="mt-4 text-[34px] font-black leading-none text-[#062b5f] xl:text-[38px]">مرحبًا بك</h1>
+              <p className="mt-2 text-[16px] text-slate-600 xl:text-[17px]">تسجيل الدخول لنظام إدارة المؤسسة</p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-6">
+            <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="mb-3 block text-[16px] font-black text-[#062b5f]">اسم المستخدم</label>
+                <label className="mb-2 block text-[15px] font-black text-[#062b5f]">اسم المستخدم</label>
                 <div className="relative">
-                  <span className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400"><UserIcon /></span>
+                  <span className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400"><UserIcon /></span>
                   <input
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
                     placeholder="أدخل اسم المستخدم"
-                    className="h-[66px] w-full rounded-2xl border border-[#c7d4e4] bg-white pr-16 pl-5 text-[17px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#073a78] focus:ring-4 focus:ring-blue-100"
+                    className="h-[54px] w-full rounded-xl border border-[#c7d4e4] bg-white pr-14 pl-5 text-[16px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#073a78] focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="mb-3 block text-[16px] font-black text-[#062b5f]">كلمة المرور</label>
+                <label className="mb-2 block text-[15px] font-black text-[#062b5f]">كلمة المرور</label>
                 <div className="relative">
-                  <span className="absolute right-6 top-1/2 -translate-y-1/2 text-slate-400"><LockIcon /></span>
+                  <span className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400"><LockIcon /></span>
                   <input
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="أدخل كلمة المرور"
-                    className="h-[66px] w-full rounded-2xl border border-[#c7d4e4] bg-white pr-16 pl-16 text-[17px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#073a78] focus:ring-4 focus:ring-blue-100"
+                    className="h-[54px] w-full rounded-xl border border-[#c7d4e4] bg-white pr-14 pl-14 text-[16px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#073a78] focus:ring-4 focus:ring-blue-100"
                   />
-                  <span className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400"><EyeIcon /></span>
+                  <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"><EyeIcon /></span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-1 text-[16px]">
+              <div className="flex items-center justify-between text-[14px]">
                 <label className="flex cursor-pointer items-center gap-2 font-bold text-[#062b5f]">
                   <input
                     type="checkbox"
@@ -187,13 +187,13 @@ export default function LoginPage() {
 
               <button
                 type="submit"
-                className="mt-6 h-[70px] w-full rounded-2xl bg-gradient-to-l from-[#002f6c] to-[#074b9b] text-[24px] font-black text-white shadow-xl shadow-blue-300/55 transition hover:from-[#00285a] hover:to-[#063f83] active:scale-[0.99]"
+                className="h-[58px] w-full rounded-xl bg-gradient-to-l from-[#002f6c] to-[#074b9b] text-[20px] font-black text-white shadow-xl shadow-blue-300/55 transition hover:from-[#00285a] hover:to-[#063f83] active:scale-[0.99]"
               >
                 تسجيل الدخول
               </button>
             </form>
 
-            <p className="mt-11 text-center text-[15px] text-slate-400">جميع الحقوق محفوظة © نمو التوصيل للخدمات اللوجستية</p>
+            <p className="mt-5 text-center text-[13px] text-slate-400">جميع الحقوق محفوظة © نمو التوصيل للخدمات اللوجستية</p>
           </div>
         </div>
 
@@ -207,24 +207,24 @@ export default function LoginPage() {
           <div className="absolute right-8 top-6 h-[150px] w-[235px] opacity-65 bg-[radial-gradient(circle,#ffffff_2px,transparent_2.8px)] [background-size:18px_18px]" />
           <div className="absolute left-10 bottom-8 h-[125px] w-[230px] opacity-60 bg-[radial-gradient(circle,#ffffff_2px,transparent_2.8px)] [background-size:18px_18px]" />
 
-          <div className="relative z-10 flex h-full flex-col items-center justify-start px-16 pt-[235px] text-center text-white">
-            <h2 className="text-[58px] font-black leading-[1.2] drop-shadow-sm">نظام إدارة المؤسسة</h2>
-            <p className="mx-auto mt-7 max-w-[820px] text-[26px] leading-[1.65] text-white/95">
+          <div className="relative z-10 flex h-full flex-col items-center justify-center px-10 py-10 text-center text-white xl:px-16">
+            <h2 className="text-[46px] font-black leading-[1.2] drop-shadow-sm xl:text-[52px]">نظام إدارة المؤسسة</h2>
+            <p className="mx-auto mt-4 max-w-[760px] text-[20px] leading-[1.55] text-white/95 xl:text-[22px]">
               منصة متكاملة لإدارة جميع العمليات والموظفين والأنظمة بكفاءة واحترافية
             </p>
 
-            <div className="mt-12 grid w-full max-w-[670px] grid-cols-3 gap-9">
+            <div className="mt-8 grid w-full max-w-[580px] grid-cols-3 gap-6">
               <div className="flex flex-col items-center">
-                <div className="flex h-[112px] w-[112px] items-center justify-center rounded-[22px] border border-white/25 bg-white/10 shadow-2xl shadow-blue-950/20 backdrop-blur-md"><ShieldIcon /></div>
-                <p className="mt-4 text-[22px] font-black">آمن وموثوق</p>
+                <div className="flex h-[88px] w-[88px] items-center justify-center rounded-[20px] border border-white/25 bg-white/10 shadow-2xl shadow-blue-950/20 backdrop-blur-md"><ShieldIcon /></div>
+                <p className="mt-3 text-[18px] font-black">آمن وموثوق</p>
               </div>
               <div className="flex flex-col items-center">
-                <div className="flex h-[112px] w-[112px] items-center justify-center rounded-[22px] border border-white/25 bg-white/10 shadow-2xl shadow-blue-950/20 backdrop-blur-md"><SpeedIcon /></div>
-                <p className="mt-4 text-[22px] font-black">سريع وفعال</p>
+                <div className="flex h-[88px] w-[88px] items-center justify-center rounded-[20px] border border-white/25 bg-white/10 shadow-2xl shadow-blue-950/20 backdrop-blur-md"><SpeedIcon /></div>
+                <p className="mt-3 text-[18px] font-black">سريع وفعال</p>
               </div>
               <div className="flex flex-col items-center">
-                <div className="flex h-[112px] w-[112px] items-center justify-center rounded-[22px] border border-white/25 bg-white/10 shadow-2xl shadow-blue-950/20 backdrop-blur-md"><ChartIcon /></div>
-                <p className="mt-4 text-[22px] font-black">تقارير ذكية</p>
+                <div className="flex h-[88px] w-[88px] items-center justify-center rounded-[20px] border border-white/25 bg-white/10 shadow-2xl shadow-blue-950/20 backdrop-blur-md"><ChartIcon /></div>
+                <p className="mt-3 text-[18px] font-black">تقارير ذكية</p>
               </div>
             </div>
           </div>

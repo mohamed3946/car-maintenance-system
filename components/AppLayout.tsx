@@ -1,4 +1,3 @@
-"use client";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -110,32 +109,32 @@ export default function AppLayout({
     <LanguageContext.Provider value={{ lang, t, dir }}>
       <main dir={dir} className="min-h-screen bg-[#f6f8fb] text-[#0f2544]">
         <div className={`flex min-h-screen ${lang === "ar" ? "flex-row" : "flex-row"}`}>
-          <aside className="sticky top-0 hidden h-screen w-[330px] flex-col justify-between overflow-hidden rounded-e-[34px] bg-gradient-to-b from-[#062b4f] via-[#042644] to-[#02182e] px-6 py-5 text-white shadow-2xl lg:flex">
+          <aside className="sticky top-0 hidden h-dvh w-[280px] shrink-0 flex-col overflow-hidden rounded-e-[34px] bg-gradient-to-b from-[#062b4f] via-[#042644] to-[#02182e] px-4 py-4 text-white shadow-2xl lg:flex xl:w-[300px] xl:px-5 2xl:w-[330px] 2xl:px-6 2xl:py-5">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_10%,rgba(45,120,255,0.22),transparent_35%),radial-gradient(circle_at_80%_65%,rgba(0,190,255,0.12),transparent_35%)]" />
 
-            <div className="relative z-10">
-              <div className="mb-2 text-center">
+            <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+              <div className="shrink-0 text-center">
                 <Image
                   src="/logo.png"
                   alt="logo"
                   width={300}
                   height={300}
-                  className="mx-auto h-52 w-52 object-contain brightness-0 invert"
+                  className="mx-auto h-28 w-28 object-contain brightness-0 invert xl:h-36 xl:w-36 2xl:h-44 2xl:w-44"
                   priority
                 />
 
-                <h2 className="mt-0 text-4xl font-extrabold tracking-tight">
+                <h2 className="text-2xl font-extrabold leading-tight tracking-tight xl:text-3xl 2xl:text-4xl">
                   {t.appName || (lang === "ar" ? "نمو التوصيل" : "Namou Delivery")}
                 </h2>
 
-                <div className="mt-1 flex items-center justify-center gap-4 text-lg font-bold text-slate-200">
-                  <span className="h-px w-16 bg-white/30" />
+                <div className="mt-1 flex items-center justify-center gap-2 text-sm font-bold text-slate-200 xl:gap-3 xl:text-base 2xl:gap-4 2xl:text-lg">
+                  <span className="h-px w-10 bg-white/30 xl:w-12 2xl:w-16" />
                   {sectionName}
-                  <span className="h-px w-16 bg-white/30" />
+                  <span className="h-px w-10 bg-white/30 xl:w-12 2xl:w-16" />
                 </div>
               </div>
 
-              <nav className="mt-5 space-y-1">
+              <nav className="mt-3 min-h-0 flex-1 space-y-1 overflow-y-auto overscroll-contain pe-1 pb-1 [scrollbar-color:rgba(255,255,255,0.28)_transparent] [scrollbar-width:thin] xl:mt-4 2xl:mt-5">
                 {menuItems.map((item) => {
                   const active =
                     system === "employees" && item.href === "/employees"
@@ -146,7 +145,7 @@ export default function AppLayout({
                     <Link
                       href={item.href}
                       key={item.name}
-                      className={`group relative flex min-h-[60px] w-full items-center justify-between rounded-2xl px-5 text-[19px] font-extrabold transition-all duration-200 ${
+                      className={`group relative flex min-h-[46px] w-full items-center justify-between rounded-xl px-3 text-[15px] font-extrabold transition-all duration-200 xl:min-h-[52px] xl:rounded-2xl xl:px-4 xl:text-[17px] 2xl:min-h-[58px] 2xl:px-5 2xl:text-[18px] ${
                         active
                           ? "bg-gradient-to-l from-blue-600 to-blue-700 text-white shadow-xl shadow-blue-950/30"
                           : "text-white/95 hover:bg-white/10"
@@ -156,7 +155,7 @@ export default function AppLayout({
                         <span className="absolute inset-y-3 start-3 w-1.5 rounded-full bg-cyan-300" />
                       )}
 
-                      <span className="flex items-center gap-4">
+                      <span className="flex items-center gap-3 xl:gap-4">
                         <span className="text-white">{item.icon}</span>
                         {item.name}
                       </span>
@@ -166,16 +165,16 @@ export default function AppLayout({
               </nav>
             </div>
 
-            <div className="relative z-10">
+            <div className="relative z-10 shrink-0 pt-3">
               <button
                 onClick={handleLogout}
-                className={`flex min-h-[70px] w-full items-center justify-center gap-4 rounded-2xl border px-5 text-[24px] font-extrabold transition-all duration-200 ${
+                className={`flex min-h-[52px] w-full items-center justify-center gap-3 rounded-xl border px-4 text-[17px] font-extrabold transition-all duration-200 xl:min-h-[58px] xl:rounded-2xl xl:text-[19px] 2xl:min-h-[64px] 2xl:gap-4 2xl:px-5 2xl:text-[21px] ${
                   logoutActive
                     ? "border-red-500 bg-red-600 text-white shadow-2xl shadow-red-900/50"
                     : "border-white/25 bg-white/5 text-white hover:border-red-500 hover:bg-red-600 hover:shadow-2xl hover:shadow-red-900/40"
                 }`}
               >
-                <LogOut className="h-9 w-9" />
+                <LogOut className="h-6 w-6 xl:h-7 xl:w-7 2xl:h-8 2xl:w-8" />
                 {t.logout || (lang === "ar" ? "تسجيل الخروج" : "Logout")}
               </button>
             </div>

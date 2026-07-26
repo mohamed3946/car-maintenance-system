@@ -53,8 +53,8 @@ export default function SystemsPage() {
           ? "إدارة الموظفين، العقود، الإجازات، الحضور والغياب، الرواتب والتركيبات"
           : "Manage employees, contracts, attendance, vacations, and payroll",
       icon: "👥",
-      active: false,
-      path: "/hr",
+      active: true,
+      path: "/employees",
       color: "from-[#08796f]/72 via-[#075f62]/62 to-[#042f42]/88",
       border: "border-cyan-300/35",
     },
@@ -88,8 +88,8 @@ export default function SystemsPage() {
       <div className="fixed inset-0 bg-[#03142d]/64" />
       <div className="fixed inset-0 bg-gradient-to-b from-[#082f66]/40 via-[#061b35]/52 to-[#020617]/94" />
 
-      <div className="pointer-events-none fixed left-0 bottom-0 h-[480px] w-[480px] rounded-full border border-sky-400/18" />
-      <div className="pointer-events-none fixed -left-40 -bottom-36 h-[700px] w-[700px] rounded-full border border-sky-400/12" />
+      <div className="pointer-events-none fixed bottom-0 left-0 h-[480px] w-[480px] rounded-full border border-sky-400/18" />
+      <div className="pointer-events-none fixed -bottom-36 -left-40 h-[700px] w-[700px] rounded-full border border-sky-400/12" />
 
       <header className="relative z-10 flex items-start justify-between px-8 pt-6 md:px-12">
         <Image
@@ -98,7 +98,7 @@ export default function SystemsPage() {
           width={260}
           height={140}
           priority
-          className="h-auto w-[210px] object-contain drop-shadow-2xl brightness-0 invert md:w-[260px]"
+          className="h-auto w-[210px] object-contain brightness-0 invert drop-shadow-2xl md:w-[260px]"
         />
 
         <div className="flex gap-3">
