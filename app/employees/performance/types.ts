@@ -3,16 +3,22 @@ export type Platform = "keeta" | "hunger";
 export type HungerRow = {
   id: number;
   name: string;
+
   batchNumber: number;
   completedDeliveries: number;
+  workingDays: number;
+
   attendanceRate: number;
   acceptanceRate: number;
   contactRate: number;
   noShowPercent: number;
+
   workingHours: number;
   totalKm: number;
   payableKm: number;
   avgKm: number;
+
+  inReport: boolean;
 };
 
 export type KeetaRow = {
@@ -35,6 +41,7 @@ export type PerformanceRecord = {
   rider_name: string | null;
 
   orders: number;
+  working_days: number;
   working_hours: number;
   attendance_rate: number;
   acceptance_rate: number;

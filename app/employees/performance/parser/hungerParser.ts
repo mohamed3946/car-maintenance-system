@@ -43,6 +43,12 @@ export function parseHungerPerformanceCsv(text: string): HungerAnalyzeInput[] {
     "Working Hours",
     "Hours",
   ]);
+  const workingDaysKey = findColumn(sample, [
+  "Working Days",
+  "Worked Days",
+  "Active Days",
+  "Days",
+]);
 
   if (!riderIdKey || !deliveriesKey) {
     throw new Error("MISSING_REQUIRED_HUNGER_COLUMNS");
@@ -56,11 +62,15 @@ export function parseHungerPerformanceCsv(text: string): HungerAnalyzeInput[] {
       riderName: nameKey ? String(row[nameKey] || "").trim() : "",
       batchNumber: batchNumber > 0 ? batchNumber : 6,
       completedDeliveries: cleanNumber(row[deliveriesKey]),
+      workingDays: workingDaysKey
+  ? cleanNumber(row[workingDaysKey])
+  : 0,
       attendanceRate: attendanceKey ? percentValue(row[attendanceKey]) : 0,
       acceptanceRate: acceptanceKey ? percentValue(row[acceptanceKey]) : 0,
       contactRate: contactKey ? percentValue(row[contactKey]) : 0,
       noShowPercent: noShowKey ? percentValue(row[noShowKey]) : 0,
       workingHours: hoursKey ? cleanNumber(row[hoursKey]) : 0,
+      
     };
   });
 }

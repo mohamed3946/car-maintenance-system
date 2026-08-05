@@ -211,13 +211,18 @@ export default function HungerDetailsTable({ rows, text }: Props) {
       </div>
 
       <div className="overflow-auto">
-        <table className="w-full min-w-[1200px] text-sm">
+        <table className="w-full min-w-[1300px] text-sm">
           <thead className="bg-slate-50 text-slate-500">
             <tr>
               <th className="p-4 text-start">{text.rider}</th>
               <th className="p-4 text-start">{text.batchNumber}</th>
               <th className="p-4 text-start">{text.level}</th>
               <th className="p-4 text-start">{text.deliveries}</th>
+
+              <th className="p-4 text-start">
+               {text.workingDays}
+               </th>
+
               <th className="p-4 text-start">{text.attendance}</th>
               <th className="p-4 text-start">{text.acceptance}</th>
               <th className="p-4 text-start">{text.contact}</th>
@@ -234,7 +239,7 @@ export default function HungerDetailsTable({ rows, text }: Props) {
             {filteredRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={13}
+                  colSpan={14}
                   className="p-10 text-center font-bold text-slate-400"
                 >
                   {ui.noResults}
@@ -260,6 +265,9 @@ export default function HungerDetailsTable({ rows, text }: Props) {
                     {formatInteger(r.completedDeliveries)}
                   </td>
 
+                  <td className="p-4 font-bold">
+                  {formatInteger(r.workingDays)}
+                  </td>
                   <td className="p-4 font-bold">
                     {formatNumber(r.attendanceRate)}%
                   </td>

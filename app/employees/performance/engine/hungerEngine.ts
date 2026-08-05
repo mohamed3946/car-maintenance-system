@@ -7,7 +7,7 @@ export type HungerAnalyzeInput = {
   employeeId?: string | null;
   riderPlatformId: string;
   riderName: string;
-
+  workingDays: number;
   batchNumber: number;
   completedDeliveries: number;
   attendanceRate: number;
@@ -25,7 +25,7 @@ export type HungerAnalyzeOutput = {
   platform: "hunger";
   riderPlatformId: string;
   riderName: string;
-
+  workingDays: number;
   orders: number;
   workingHours: number;
   attendanceRate: number;
@@ -78,6 +78,7 @@ export function analyzeHungerRider(
     riderName: input.riderName || "",
 
     orders: Number(input.completedDeliveries || 0),
+    workingDays: Number(input.workingDays || 0),
     workingHours: Number(input.workingHours || 0),
     attendanceRate: Number(input.attendanceRate || 0),
     acceptanceRate: Number(input.acceptanceRate || 0),

@@ -69,109 +69,293 @@ export async function importPerformanceReport({
   const text = await file.text();
   const reportMonth = getReportMonth();
 
-  if (reportType === "distance") {
-    if (platform !== "hunger") {
-      throw new Error("DISTANCE_REPORT_ONLY_FOR_HUNGER");
-    }
+if (reportType === "distance") {
+  if (platform !== "hunger") {
+    throw new Error(
+      "DISTANCE_REPORT_ONLY_FOR_HUNGER"
+    );
+  }
 
-    const rows = parseHungerDistanceCsv(text);
+  // parser يرجع الآن صفًا واحدًا مجمعًا لكل مندوب
+  const rows = parseHungerDistanceCsv(text);
 
-    const { error } = await savePerformanceReport({
+  const { error: reportError } =
+    await savePerformanceReport({
       platform,
       reportType,
       fileName: file.name,
       recordsCount: rows.length,
     });
 
-    if (error) throw error;
+  if (reportError) throw reportError;
 
-    let matchedCount = 0;
+  let matchedCount = 0;
 
-    for (const row of rows) {
-      const { error: updateError, count } = await supabase
+  for (const row of rows) {
+    /*
+      قد يكون للمندوب أكثر من سجل أداء في قاعدة البيانات.
+      نضع إجمالي المسافة في سجل واحد فقط، ونصفر بقية السجلات؛
+      حتى لا تُجمع نفس المسافة عدة مرات في صفحة الأداء.
+    */
+    const { data: riderRecords, error: fetchError } =
+      await supabase
         .from("performance_records")
-        .update(
-          {
-            total_km: row.totalKm,
-            payable_km: row.payableKm,
-            avg_km: row.avgKm,
-            updated_at: new Date().toISOString(),
-          },
-          { count: "exact" }
-        )
+        .select("id")
         .eq("platform", "hunger")
         .eq("report_month", reportMonth)
-        .eq("rider_platform_id", row.riderPlatformId);
+        .eq(
+          "rider_platform_id",
+          row.riderPlatformId
+        )
+        .order("report_date", {
+          ascending: false,
+        })
+        .order("id", {
+          ascending: true,
+        });
 
-      if (updateError) throw updateError;
-      if ((count || 0) > 0) matchedCount += count || 0;
+    if (fetchError) throw fetchError;
+
+    if (!riderRecords?.length) {
+      continue;
     }
 
-    return {
-      recordsCount: rows.length,
-      matchedCount,
-    };
+    const [primaryRecord, ...duplicateRecords] =
+      riderRecords;
+
+    // حفظ الإجمالي في سجل واحد فقط
+    const { error: updatePrimaryError } =
+      await supabase
+        .from("performance_records")
+        .update({
+          total_km: row.totalKm,
+          payable_km: row.payableKm,
+          avg_km: row.avgKm,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", primaryRecord.id);
+
+    if (updatePrimaryError) {
+      throw updatePrimaryError;
+    }
+
+    // تصفير المسافات في السجلات المكررة لنفس المندوب
+    if (duplicateRecords.length > 0) {
+      const duplicateIds = duplicateRecords.map(
+        (record) => record.id
+      );
+
+      const { error: resetDuplicatesError } =
+        await supabase
+          .from("performance_records")
+          .update({
+            total_km: 0,
+            payable_km: 0,
+            avg_km: 0,
+            updated_at: new Date().toISOString(),
+          })
+          .in("id", duplicateIds);
+
+      if (resetDuplicatesError) {
+        throw resetDuplicatesError;
+      }
+    }
+
+    matchedCount += 1;
   }
+
+  return {
+    recordsCount: rows.length,
+    matchedCount,
+  };
+}
 
   let matchedCount = 0;
   const records: any[] = [];
 
-  if (platform === "hunger") {
-    const parsedRows = parseHungerPerformanceCsv(text);
+if (platform === "hunger") {
+  const parsedRows = parseHungerPerformanceCsv(text);
 
-    const { data: report, error: reportError } = await savePerformanceReport({
+  const { data: report, error: reportError } =
+    await savePerformanceReport({
       platform,
       reportType,
       fileName: file.name,
       recordsCount: parsedRows.length,
     });
 
-    if (reportError) throw reportError;
+  if (reportError) throw reportError;
 
-    await supabase
-      .from("performance_records")
-      .delete()
-      .eq("platform", "hunger")
-      .eq("report_month", reportMonth);
+  // تجميع جميع صفوف كل مندوب في سجل واحد
+  const ridersMap = new Map<string, any>();
 
-    for (const row of parsedRows) {
-      const resolved = await resolveEmployeeByPlatformId("hunger", row.riderPlatformId);
+parsedRows.forEach((row) => {
+  const riderId = String(
+    row.riderPlatformId || ""
+  ).trim();
 
-      if (resolved.found) matchedCount++;
+  if (!riderId) return;
 
-      const result = analyzeHungerRider({
-        ...row,
-        employeeId: resolved.employeeId || undefined,
-        riderName: resolved.employeeName || row.riderName,
-      });
+  const existing = ridersMap.get(riderId);
 
-      records.push({
-        employee_id: result.employeeId || null,
-        platform: result.platform,
-        report_month: reportMonth,
-        report_date: getLocalDate(),
-        rider_platform_id: result.riderPlatformId,
-        rider_name: result.riderName,
-        orders: result.orders,
-        working_hours: result.workingHours,
-        attendance_rate: result.attendanceRate,
-        acceptance_rate: result.acceptanceRate,
-        contact_rate: result.contactRate,
-        no_show_percent: result.noShowPercent,
-        batch_number: result.batchNumber,
-        level: result.level,
-        total_km: 0,
-        payable_km: 0,
-        avg_km: 0,
-        quality_bonus: result.qualityBonus,
-        eligible: result.eligible,
-        status: result.status,
-        eligibility_reasons: result.reasons,
-        source_report_id: report.id,
-      });
-    }
+  if (!existing) {
+    ridersMap.set(riderId, {
+      ...row,
+
+      completedDeliveries: Number(
+        row.completedDeliveries || 0
+      ),
+      workingDays: Number(row.workingDays || 0),
+      workingHours: Number(row.workingHours || 0),
+
+      attendanceTotal: Number(
+        row.attendanceRate || 0
+      ),
+
+      acceptanceTotal: Number(
+        row.acceptanceRate || 0
+      ),
+
+      contactTotal: Number(
+        row.contactRate || 0
+      ),
+
+      noShowTotal: Number(
+        row.noShowPercent || 0
+      ),
+
+      recordsCount: 1,
+    });
+
+    return;
   }
 
+  // إجمالي الطلبات لكل صفوف المندوب
+  existing.completedDeliveries += Number(
+    row.completedDeliveries || 0
+  );
+  existing.workingDays += Number(row.workingDays || 0);
+  existing.workingHours += Number(
+    row.workingHours || 0
+  );
+
+  existing.attendanceTotal += Number(
+    row.attendanceRate || 0
+  );
+
+  existing.acceptanceTotal += Number(
+    row.acceptanceRate || 0
+  );
+
+  existing.contactTotal += Number(
+    row.contactRate || 0
+  );
+
+  existing.noShowTotal += Number(
+    row.noShowPercent || 0
+  );
+
+  existing.recordsCount += 1;
+
+  // آخر Batch حسب آخر ظهور في ملف CSV
+  existing.batchNumber = Number(
+    row.batchNumber || 6
+  );
+
+  if (row.riderName) {
+    existing.riderName = row.riderName;
+  }
+});
+
+ const aggregatedRows = Array.from(
+  ridersMap.values()
+).map((row) => {
+  const count = row.recordsCount || 1;
+
+  return {
+    ...row,
+
+    completedDeliveries:
+      row.completedDeliveries,
+
+    attendanceRate: Number(
+      (row.attendanceTotal / count).toFixed(2)
+    ),
+
+    acceptanceRate: Number(
+      (row.acceptanceTotal / count).toFixed(2)
+    ),
+
+    contactRate: Number(
+      (row.contactTotal / count).toFixed(2)
+    ),
+
+    noShowPercent: Number(
+      (row.noShowTotal / count).toFixed(2)
+    ),
+  };
+});
+  // حذف سجلات هنجرستيشن القديمة لهذا الشهر
+  const { error: deleteError } = await supabase
+    .from("performance_records")
+    .delete()
+    .eq("platform", "hunger")
+    .eq("report_month", reportMonth);
+
+  if (deleteError) throw deleteError;
+
+  // إنشاء سجل واحد فقط لكل مندوب
+  for (const row of aggregatedRows) {
+    const resolved = await resolveEmployeeByPlatformId(
+      "hunger",
+      row.riderPlatformId
+    );
+
+    if (resolved.found) {
+      matchedCount++;
+    }
+
+    const result = analyzeHungerRider({
+      ...row,
+      employeeId: resolved.employeeId || undefined,
+      riderName:
+        resolved.employeeName || row.riderName,
+    });
+
+    records.push({
+      employee_id: result.employeeId || null,
+      platform: result.platform,
+      report_month: reportMonth,
+      report_date: getLocalDate(),
+
+      rider_platform_id: result.riderPlatformId,
+      rider_name: result.riderName,
+
+      orders: result.orders,
+      working_days: result.workingDays,
+      working_hours: result.workingHours,
+
+      attendance_rate: result.attendanceRate,
+      acceptance_rate: result.acceptanceRate,
+      contact_rate: result.contactRate,
+      no_show_percent: result.noShowPercent,
+
+      batch_number: result.batchNumber,
+      level: result.level,
+
+      total_km: 0,
+      payable_km: 0,
+      avg_km: 0,
+
+      quality_bonus: result.qualityBonus,
+      eligible: result.eligible,
+      status: result.status,
+      eligibility_reasons: result.reasons,
+
+      source_report_id: report.id,
+    });
+  }
+}
   if (platform === "keeta") {
     const parsedRows = parseKeetaPerformanceCsv(text);
 
@@ -239,4 +423,38 @@ export async function loadPerformanceRecords(platform: PlatformType) {
     .eq("platform", platform)
     .eq("report_month", getReportMonth())
     .order("orders", { ascending: false });
+}
+export async function loadHungerEmployees() {
+  const { data, error } = await supabase
+    .from("employees")
+    .select(
+      "id, name, platform_id, work_location, job_title, status"
+    )
+    .not("platform_id", "is", null);
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  const hungerEmployees = (data || []).filter((employee: any) => {
+    const platformId = String(employee.platform_id || "").trim();
+
+    if (!platformId) return false;
+
+    const workLocation = String(
+      employee.work_location || ""
+    ).toLowerCase();
+
+    return (
+      workLocation.includes("hunger") ||
+      workLocation.includes("هنجر") ||
+      workLocation.includes("both") ||
+      workLocation.includes("الاثنين")
+    );
+  });
+
+  return {
+    data: hungerEmployees,
+    error: null,
+  };
 }
