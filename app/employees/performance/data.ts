@@ -6,6 +6,10 @@ export const hungerRows: HungerRow[] = [
     name: "Ahmed Mohamed",
     batchNumber: 1,
     completedDeliveries: 456,
+
+    workingDays: 28,
+    inReport: true,
+
     attendanceRate: 96,
     acceptanceRate: 94,
     contactRate: 98,
@@ -20,6 +24,10 @@ export const hungerRows: HungerRow[] = [
     name: "Mohamed Ali",
     batchNumber: 2,
     completedDeliveries: 398,
+
+    workingDays: 27,
+    inReport: true,
+
     attendanceRate: 95,
     acceptanceRate: 92,
     contactRate: 97,
@@ -34,6 +42,10 @@ export const hungerRows: HungerRow[] = [
     name: "Saeed Al-Shahrani",
     batchNumber: 3,
     completedDeliveries: 356,
+
+    workingDays: 26,
+    inReport: true,
+
     attendanceRate: 93,
     acceptanceRate: 88,
     contactRate: 96,
@@ -48,6 +60,10 @@ export const hungerRows: HungerRow[] = [
     name: "Nasser Al-Mutairi",
     batchNumber: 6,
     completedDeliveries: 58,
+
+    workingDays: 14,
+    inReport: true,
+
     attendanceRate: 70,
     acceptanceRate: 65,
     contactRate: 82,
