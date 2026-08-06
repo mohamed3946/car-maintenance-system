@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AppLayout, { useLanguage } from "../../../components/AppLayout";
 import { supabase } from "../../lib/supabase";
 import {
@@ -11,14 +11,12 @@ import {
   Filter,
   MoreVertical,
   Plus,
-  Save,
   Search,
   ShieldAlert,
   Trash2,
   UserCheck,
   UserX,
   Users,
-  X,
 } from "lucide-react";
 
 type Lang = "ar" | "en";
@@ -56,10 +54,10 @@ function EmployeesListContent() {
   const [status, setStatus] = useState("all");
   const [workLocation, setWorkLocation] = useState("all");
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [openStatusId, setOpenStatusId] = useState<string | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
-
-  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadEmployees();
@@ -67,8 +65,14 @@ function EmployeesListContent() {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+      const target = event.target as HTMLElement;
+
+      if (!target.closest("[data-actions-menu]")) {
         setOpenMenuId(null);
+      }
+
+      if (!target.closest("[data-status-menu]")) {
+        setOpenStatusId(null);
       }
     }
 
@@ -139,6 +143,9 @@ function EmployeesListContent() {
     cancel: isAr ? "إلغاء" : "Cancel",
     loading: isAr ? "جاري تحميل البيانات..." : "Loading data...",
     noData: isAr ? "لا توجد بيانات موظفين" : "No employees found",
+    resultsCount: isAr ? "عدد الموظفين الظاهرين" : "Visible Employees",
+    totalCount: isAr ? "إجمالي الموظفين" : "Total Employees",
+    updatingStatus: isAr ? "جاري التحديث..." : "Updating...",
   };
 
   const filtered = useMemo(() => {
@@ -157,9 +164,13 @@ function EmployeesListContent() {
         .toLowerCase();
 
       const matchesQuery = searchText.includes(query.toLowerCase());
-      const matchesStatus = status === "all" || employee.status === status;
+      const matchesStatus =
+        status === "all" ||
+        normalizeEmployeeStatus(employee.status) === status;
+
       const matchesLocation =
-        workLocation === "all" || employee.workLocation === workLocation;
+        workLocation === "all" ||
+        normalizeWorkLocation(employee.workLocation) === workLocation;
 
       return matchesQuery && matchesStatus && matchesLocation;
     });
@@ -224,6 +235,56 @@ function EmployeesListContent() {
 
     setOpenMenuId(null);
     await loadEmployees();
+  }
+
+  async function changeEmployeeStatus(
+    employee: Employee,
+    newStatus: string
+  ) {
+    if (employee.status === newStatus || updatingStatusId === employee.id) {
+      setOpenStatusId(null);
+      return;
+    }
+
+    const previousStatus = employee.status;
+
+    setUpdatingStatusId(employee.id);
+    setOpenStatusId(null);
+
+    // تحديث فوري في الواجهة
+    setEmployees((current) =>
+      current.map((item) =>
+        item.id === employee.id
+          ? { ...item, status: newStatus }
+          : item
+      )
+    );
+
+    const { error } = await supabase
+      .from("employees")
+      .update({ status: newStatus })
+      .eq("id", employee.id);
+
+    if (error) {
+      console.error("CHANGE EMPLOYEE STATUS ERROR:", error);
+
+      // الرجوع للحالة القديمة إذا فشل الحفظ
+      setEmployees((current) =>
+        current.map((item) =>
+          item.id === employee.id
+            ? { ...item, status: previousStatus }
+            : item
+        )
+      );
+
+      alert(
+        isAr
+          ? "فشل تحديث حالة الموظف"
+          : "Failed to update employee status"
+      );
+    }
+
+    setUpdatingStatusId(null);
   }
 
   async function deleteEmployee(employee: Employee) {
@@ -367,11 +428,21 @@ function EmployeesListContent() {
 
       <div className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-sm">
         {loading ? (
-          <div className="p-8 text-center font-bold text-slate-500">{text.loading}</div>
-        ) : filtered.length === 0 ? (
-          <div className="p-8 text-center font-bold text-slate-500">{text.noData}</div>
+          <div className="p-8 text-center font-bold text-slate-500">
+            {text.loading}
+          </div>
         ) : (
-          <table dir={isAr ? "rtl" : "ltr"} className="w-full text-sm">
+          <>
+            {filtered.length === 0 ? (
+              <div className="p-8 text-center font-bold text-slate-500">
+                {text.noData}
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table
+                  dir={isAr ? "rtl" : "ltr"}
+                  className="w-full min-w-[1150px] text-sm"
+                >
             <thead className="bg-slate-50 text-slate-500">
               <tr>
                 <th className="p-4 text-start">{text.employee}</th>
@@ -399,26 +470,88 @@ function EmployeesListContent() {
                   <td className="p-4 font-bold text-slate-600">{employee.nationality}</td>
                   <td className="p-4 font-bold text-slate-600">{jobTitleText(employee.jobTitle, lang)}</td>
                   <td className="p-4 font-bold text-slate-600">{workLocationText(employee.workLocation, lang)}</td>
-                  <td className="p-4">
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${statusClass(employee.status)}`}>
-                      {statusText(employee.status, lang)}
-                    </span>
+                  <td className="relative p-4">
+                    <div
+                      data-status-menu
+                      className="relative inline-block"
+                    >
+                      <button
+                        type="button"
+                        disabled={updatingStatusId === employee.id}
+                        onClick={() => {
+                          setOpenMenuId(null);
+                          setOpenStatusId(
+                            openStatusId === employee.id
+                              ? null
+                              : employee.id
+                          );
+                        }}
+                        className={`inline-flex min-w-[78px] items-center justify-center rounded-full px-3 py-1 text-xs font-bold transition hover:scale-105 disabled:cursor-wait disabled:opacity-60 ${statusClass(
+                          employee.status
+                        )}`}
+                      >
+                        {updatingStatusId === employee.id
+                          ? text.updatingStatus
+                          : statusText(employee.status, lang)}
+                      </button>
+
+                      {openStatusId === employee.id && (
+                        <div
+                          className={`absolute top-9 z-[70] w-44 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1 shadow-xl ${
+                            isAr ? "right-0" : "left-0"
+                          }`}
+                        >
+                          {statusOptions(lang).map((option) => {
+                            const selected =
+                              employee.status === option.value;
+
+                            return (
+                              <button
+                                key={option.value}
+                                type="button"
+                                onClick={() =>
+                                  changeEmployeeStatus(
+                                    employee,
+                                    option.value
+                                  )
+                                }
+                                className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-bold transition ${
+                                  selected
+                                    ? "bg-blue-50 text-blue-700"
+                                    : "text-slate-700 hover:bg-slate-50"
+                                }`}
+                              >
+                                <span>{option.label}</span>
+                                <span
+                                  className={`h-2.5 w-2.5 rounded-full ${statusDotClass(
+                                    option.value
+                                  )}`}
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="p-4">
                     <span className={`rounded-full px-3 py-1 text-xs font-bold ${performanceClass(employee.performance)}`}>
                       {performanceText(employee.performance, lang)}
                     </span>
                   </td>
-                  <td className="relative p-4">
+                  <td className="relative p-4" data-actions-menu>
                     <button
-                      onClick={() => setOpenMenuId(openMenuId === employee.id ? null : employee.id)}
+                      onClick={() => {
+                        setOpenStatusId(null);
+                        setOpenMenuId(openMenuId === employee.id ? null : employee.id);
+                      }}
                       className="rounded-xl border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50"
                     >
                       <MoreVertical className="h-5 w-5" />
                     </button>
 
                     {openMenuId === employee.id && (
-                      <div ref={menuRef} className="absolute left-4 top-12 z-50 w-48 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+                      <div className="absolute left-4 top-12 z-50 w-48 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
                         <Link href={`/employees/${employee.id}`} className="flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700">
                           <Eye className="h-4 w-4" />
                           {text.viewDetails}
@@ -447,14 +580,89 @@ function EmployeesListContent() {
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
+                </tbody>
+                </table>
+              </div>
+            )}
+
+            <div
+              dir={isAr ? "rtl" : "ltr"}
+              className="flex items-center justify-center border-t border-slate-200 bg-slate-50 px-5 py-4"
+            >
+              <div className="rounded-2xl bg-blue-50 px-6 py-3 text-sm font-black text-blue-700">
+                {isAr
+                  ? "عدد الموظفين في النتائج الحالية"
+                  : "Employees in Current Results"}
+                :{" "}
+                <span className="text-xl">
+                  {filtered.length.toLocaleString("en-US")}
+                </span>
+              </div>
+            </div>
+          </>
         )}
       </div>
-
-
     </>
   );
+}
+
+function normalizeEmployeeStatus(value: string) {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (["active", "نشط"].includes(normalized)) {
+    return "active";
+  }
+
+  if (["stopped", "متوقف", "موقوف"].includes(normalized)) {
+    return "stopped";
+  }
+
+  if (["vacation", "إجازة", "اجازة"].includes(normalized)) {
+    return "vacation";
+  }
+
+  if (
+    [
+      "outofservice",
+      "out_of_service",
+      "out of service",
+      "خارج الخدمة",
+    ].includes(normalized)
+  ) {
+    return "outOfService";
+  }
+
+  return normalized;
+}
+
+function normalizeWorkLocation(value: string) {
+  const normalized = String(value || "").trim().toLowerCase();
+
+  if (
+    [
+      "hungerstation",
+      "hunger station",
+      "hunger",
+      "هنجرستيشن",
+      "هنقرستيشن",
+    ].includes(normalized)
+  ) {
+    return "HungerStation";
+  }
+
+  if (["keeta", "كيتا"].includes(normalized)) {
+    return "Keeta";
+  }
+
+  if (["management", "الإدارة", "الادارة"].includes(normalized)) {
+    return "management";
+  }
+
+  if (["maintenance", "الصيانة"].includes(normalized)) {
+    return "maintenance";
+  }
+
+  return value;
 }
 
 function statusText(status: string, lang: Lang) {
@@ -519,6 +727,15 @@ function statusClass(status: string) {
   if (status === "stopped" || status === "متوقف") return "bg-red-50 text-red-700";
   if (status === "vacation" || status === "إجازة") return "bg-orange-50 text-orange-700";
   return "bg-slate-100 text-slate-700";
+}
+
+function statusDotClass(status: string) {
+  if (status === "active") return "bg-green-500";
+  if (status === "stopped") return "bg-red-500";
+  if (status === "vacation") return "bg-orange-500";
+  if (status === "outOfService") return "bg-slate-500";
+
+  return "bg-slate-300";
 }
 
 function performanceClass(performance: string) {

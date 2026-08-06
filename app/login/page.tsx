@@ -1,8 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "../lib/supabase";
 
 function UserIcon() {
   return (
@@ -105,17 +106,70 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
 
-  const handleLogin = (e: React.FormEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    const savedEmail = localStorage.getItem("login_email");
+    if (savedEmail) {
+      setUsername(savedEmail);
+    }
+  }, []);
+
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setErrorMessage("");
 
     if (!username.trim() || !password.trim()) {
-      alert("من فضلك أدخل اسم المستخدم وكلمة المرور");
+      setErrorMessage("من فضلك أدخل البريد الإلكتروني وكلمة المرور");
       return;
     }
 
-    if (remember) localStorage.setItem("user", username);
-    router.push("/systems");
+    try {
+      setLoading(true);
+
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: username.trim(),
+        password,
+      });
+
+      if (error || !data.user) {
+        setErrorMessage("البريد الإلكتروني أو كلمة المرور غير صحيحة");
+        return;
+      }
+
+      const { data: appUser, error: appUserError } = await supabase
+        .from("app_users")
+        .select("id, is_active")
+        .eq("id", data.user.id)
+        .maybeSingle();
+
+      if (appUserError || !appUser) {
+        await supabase.auth.signOut();
+        setErrorMessage("هذا الحساب غير مرتبط بمستخدم داخل النظام");
+        return;
+      }
+
+      if (!appUser.is_active) {
+        await supabase.auth.signOut();
+        setErrorMessage("هذا الحساب موقوف. يرجى التواصل مع مدير النظام");
+        return;
+      }
+
+      if (remember) {
+        localStorage.setItem("login_email", username.trim());
+      } else {
+        localStorage.removeItem("login_email");
+      }
+
+      router.replace("/systems");
+      router.refresh();
+    } catch {
+      setErrorMessage("حدث خطأ أثناء تسجيل الدخول. حاول مرة أخرى");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -144,13 +198,15 @@ export default function LoginPage() {
 
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
-                <label className="mb-2 block text-[15px] font-black text-[#062b5f]">اسم المستخدم</label>
+                <label className="mb-2 block text-[15px] font-black text-[#062b5f]">البريد الإلكتروني</label>
                 <div className="relative">
                   <span className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400"><UserIcon /></span>
                   <input
+                    type="email"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    placeholder="أدخل اسم المستخدم"
+                    placeholder="أدخل البريد الإلكتروني"
+                    autoComplete="email"
                     className="h-[54px] w-full rounded-xl border border-[#c7d4e4] bg-white pr-14 pl-5 text-[16px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#073a78] focus:ring-4 focus:ring-blue-100"
                   />
                 </div>
@@ -161,13 +217,21 @@ export default function LoginPage() {
                 <div className="relative">
                   <span className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400"><LockIcon /></span>
                   <input
-                    type="password"
+                    type={showPassword ? "text" : "password"}
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="أدخل كلمة المرور"
+                    autoComplete="current-password"
                     className="h-[54px] w-full rounded-xl border border-[#c7d4e4] bg-white pr-14 pl-14 text-[16px] text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#073a78] focus:ring-4 focus:ring-blue-100"
                   />
-                  <span className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400"><EyeIcon /></span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((current) => !current)}
+                    aria-label={showPassword ? "إخفاء كلمة المرور" : "إظهار كلمة المرور"}
+                    className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 transition hover:text-[#073a78]"
+                  >
+                    <EyeIcon />
+                  </button>
                 </div>
               </div>
 
@@ -185,11 +249,21 @@ export default function LoginPage() {
                 <button type="button" className="font-bold text-[#073a78] hover:underline">نسيت كلمة المرور؟</button>
               </div>
 
+              {errorMessage && (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-center text-[14px] font-bold text-red-700"
+                >
+                  {errorMessage}
+                </div>
+              )}
+
               <button
                 type="submit"
-                className="h-[58px] w-full rounded-xl bg-gradient-to-l from-[#002f6c] to-[#074b9b] text-[20px] font-black text-white shadow-xl shadow-blue-300/55 transition hover:from-[#00285a] hover:to-[#063f83] active:scale-[0.99]"
+                disabled={loading}
+                className="h-[58px] w-full rounded-xl bg-gradient-to-l from-[#002f6c] to-[#074b9b] text-[20px] font-black text-white shadow-xl shadow-blue-300/55 transition hover:from-[#00285a] hover:to-[#063f83] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-65"
               >
-                تسجيل الدخول
+                {loading ? "جارٍ تسجيل الدخول..." : "تسجيل الدخول"}
               </button>
             </form>
 
@@ -233,4 +307,3 @@ export default function LoginPage() {
     </main>
   );
 }
-
