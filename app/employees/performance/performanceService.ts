@@ -70,62 +70,109 @@ export async function importPerformanceReport({
   const reportMonth = getReportMonth();
 
 if (reportType === "distance") {
-  if (platform !== "hunger") {
-    throw new Error(
-      "DISTANCE_REPORT_ONLY_FOR_HUNGER"
-    );
-  }
+    if (platform !== "hunger") {
+      throw new Error("DISTANCE_REPORT_ONLY_FOR_HUNGER");
+    }
 
-  // parser يرجع الآن صفًا واحدًا مجمعًا لكل مندوب
-  const rows = parseHungerDistanceCsv(text);
+    // تقرير المسافات الآن يرجع صفًا لكل مندوب / يوم
+    const dailyRows = parseHungerDistanceCsv(text);
 
-  const { error: reportError } =
-    await savePerformanceReport({
+    const { error: reportError } = await savePerformanceReport({
       platform,
       reportType,
       fileName: file.name,
-      recordsCount: rows.length,
+      recordsCount: dailyRows.length,
     });
 
-  if (reportError) throw reportError;
+    if (reportError) throw reportError;
 
-  let matchedCount = 0;
+    // حذف التفاصيل اليومية القديمة لهذا الشهر
+    const { error: deleteDailyError } = await supabase
+      .from("hunger_daily_performance")
+      .delete()
+      .eq("report_month", reportMonth);
 
-  for (const row of rows) {
-    /*
-      قد يكون للمندوب أكثر من سجل أداء في قاعدة البيانات.
-      نضع إجمالي المسافة في سجل واحد فقط، ونصفر بقية السجلات؛
-      حتى لا تُجمع نفس المسافة عدة مرات في صفحة الأداء.
-    */
-    const { data: riderRecords, error: fetchError } =
-      await supabase
+    if (deleteDailyError) throw deleteDailyError;
+
+    // حفظ التفاصيل اليومية
+    if (dailyRows.length > 0) {
+      const dailyRecords = dailyRows.map((row) => ({
+        report_month: reportMonth,
+        rider_platform_id: row.riderPlatformId,
+        work_date: row.workDate,
+        completed_deliveries: Number(row.completedDeliveries || 0),
+        total_km: Number(row.totalKm || 0),
+        payable_km: Number(row.payableKm || 0),
+        avg_km: Number(row.avgKm || 0),
+        updated_at: new Date().toISOString(),
+      }));
+
+      const { error: dailyInsertError } = await supabase
+        .from("hunger_daily_performance")
+        .insert(dailyRecords);
+
+      if (dailyInsertError) throw dailyInsertError;
+    }
+
+    // تجميع إجماليات كل مندوب للحفاظ على الداشبورد الحالي
+    type AggregatedDistance = {
+      riderPlatformId: string;
+      totalKm: number;
+      payableKm: number;
+      completedDeliveries: number;
+    };
+
+    const ridersMap = new Map<string, AggregatedDistance>();
+
+    dailyRows.forEach((row) => {
+      const riderId = String(row.riderPlatformId || "").trim();
+      if (!riderId) return;
+
+      const existing = ridersMap.get(riderId);
+
+      if (!existing) {
+        ridersMap.set(riderId, {
+          riderPlatformId: riderId,
+          totalKm: Number(row.totalKm || 0),
+          payableKm: Number(row.payableKm || 0),
+          completedDeliveries: Number(row.completedDeliveries || 0),
+        });
+        return;
+      }
+
+      existing.totalKm += Number(row.totalKm || 0);
+      existing.payableKm += Number(row.payableKm || 0);
+      existing.completedDeliveries += Number(row.completedDeliveries || 0);
+    });
+
+    const aggregatedRows = Array.from(ridersMap.values()).map((rider) => ({
+      ...rider,
+      totalKm: Number(rider.totalKm.toFixed(3)),
+      payableKm: Number(rider.payableKm.toFixed(3)),
+      avgKm:
+        rider.completedDeliveries > 0
+          ? Number((rider.totalKm / rider.completedDeliveries).toFixed(3))
+          : 0,
+    }));
+
+    let matchedCount = 0;
+
+    for (const row of aggregatedRows) {
+      const { data: riderRecords, error: fetchError } = await supabase
         .from("performance_records")
         .select("id")
         .eq("platform", "hunger")
         .eq("report_month", reportMonth)
-        .eq(
-          "rider_platform_id",
-          row.riderPlatformId
-        )
-        .order("report_date", {
-          ascending: false,
-        })
-        .order("id", {
-          ascending: true,
-        });
+        .eq("rider_platform_id", row.riderPlatformId)
+        .order("report_date", { ascending: false })
+        .order("id", { ascending: true });
 
-    if (fetchError) throw fetchError;
+      if (fetchError) throw fetchError;
+      if (!riderRecords?.length) continue;
 
-    if (!riderRecords?.length) {
-      continue;
-    }
+      const [primaryRecord, ...duplicateRecords] = riderRecords;
 
-    const [primaryRecord, ...duplicateRecords] =
-      riderRecords;
-
-    // حفظ الإجمالي في سجل واحد فقط
-    const { error: updatePrimaryError } =
-      await supabase
+      const { error: updatePrimaryError } = await supabase
         .from("performance_records")
         .update({
           total_km: row.totalKm,
@@ -135,18 +182,12 @@ if (reportType === "distance") {
         })
         .eq("id", primaryRecord.id);
 
-    if (updatePrimaryError) {
-      throw updatePrimaryError;
-    }
+      if (updatePrimaryError) throw updatePrimaryError;
 
-    // تصفير المسافات في السجلات المكررة لنفس المندوب
-    if (duplicateRecords.length > 0) {
-      const duplicateIds = duplicateRecords.map(
-        (record) => record.id
-      );
+      if (duplicateRecords.length > 0) {
+        const duplicateIds = duplicateRecords.map((record) => record.id);
 
-      const { error: resetDuplicatesError } =
-        await supabase
+        const { error: resetDuplicatesError } = await supabase
           .from("performance_records")
           .update({
             total_km: 0,
@@ -156,19 +197,18 @@ if (reportType === "distance") {
           })
           .in("id", duplicateIds);
 
-      if (resetDuplicatesError) {
-        throw resetDuplicatesError;
+        if (resetDuplicatesError) throw resetDuplicatesError;
       }
+
+      matchedCount += 1;
     }
 
-    matchedCount += 1;
+    return {
+      recordsCount: dailyRows.length,
+      matchedCount,
+    };
   }
 
-  return {
-    recordsCount: rows.length,
-    matchedCount,
-  };
-}
 
   let matchedCount = 0;
   const records: any[] = [];

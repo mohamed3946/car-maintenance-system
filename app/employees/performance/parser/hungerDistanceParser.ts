@@ -7,12 +7,46 @@ import {
 
 export type HungerDistanceRow = {
   riderPlatformId: string;
+
+  workDate: string;
+
   totalKm: number;
   payableKm: number;
   avgKm: number;
+
   completedDeliveries: number;
-  workingDays: number;
 };
+
+function normalizeDate(value: any): string {
+  const raw = String(value || "").trim();
+
+  if (!raw) return "";
+
+  // لو التاريخ بالفعل YYYY-MM-DD
+  const isoMatch = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (isoMatch) {
+    return raw;
+  }
+
+  const date = new Date(raw);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  const year = date.getFullYear();
+
+  const month = String(
+    date.getMonth() + 1
+  ).padStart(2, "0");
+
+  const day = String(
+    date.getDate()
+  ).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
 
 export function parseHungerDistanceCsv(
   text: string
@@ -48,91 +82,61 @@ export function parseHungerDistanceCsv(
     "payable_km",
   ]);
 
+  const avgKmKey = findColumn(sample, [
+    "AVG KM",
+    "Avg KM",
+    "Average KM",
+    "avg_km",
+  ]);
+
   const deliveriesKey = findColumn(sample, [
     "Completed Deliveries",
     "Deliveries",
     "Completed Orders",
+    "Orders",
   ]);
 
-  if (!riderIdKey || !totalKmKey) {
+  if (!riderIdKey || !dateKey || !totalKmKey) {
     throw new Error(
       "MISSING_REQUIRED_HUNGER_DISTANCE_COLUMNS"
     );
   }
 
-  type AggregatedDistance = {
-    riderPlatformId: string;
-    totalKm: number;
-    payableKm: number;
-    completedDeliveries: number;
-    dates: Set<string>;
-  };
+  return rows
+    .map((row: CsvRow) => {
+      const riderPlatformId = String(
+        row[riderIdKey] || ""
+      ).trim();
 
-  const ridersMap = new Map<string, AggregatedDistance>();
+      const workDate = normalizeDate(
+        row[dateKey]
+      );
 
-  rows.forEach((row: CsvRow) => {
-    const riderPlatformId = String(
-      row[riderIdKey] || ""
-    ).trim();
-
-    if (!riderPlatformId) return;
-
-    const totalKm = cleanNumber(row[totalKmKey]);
-
-    const payableKm = payableKmKey
-      ? cleanNumber(row[payableKmKey])
-      : 0;
-
-    const completedDeliveries = deliveriesKey
-      ? cleanNumber(row[deliveriesKey])
-      : 0;
-
-    const workDate = dateKey
-      ? String(row[dateKey] || "").trim()
-      : "";
-
-    const existing = ridersMap.get(riderPlatformId);
-
-    if (!existing) {
-      ridersMap.set(riderPlatformId, {
+      return {
         riderPlatformId,
-        totalKm,
-        payableKm,
-        completedDeliveries,
-        dates: new Set(workDate ? [workDate] : []),
-      });
 
-      return;
-    }
+        workDate,
 
-    existing.totalKm += totalKm;
-    existing.payableKm += payableKm;
-    existing.completedDeliveries += completedDeliveries;
+        totalKm: cleanNumber(
+          row[totalKmKey]
+        ),
 
-    if (workDate) {
-      existing.dates.add(workDate);
-    }
-  });
+        payableKm: payableKmKey
+          ? cleanNumber(row[payableKmKey])
+          : 0,
 
-  return Array.from(ridersMap.values()).map((rider) => ({
-    riderPlatformId: rider.riderPlatformId,
+        avgKm: avgKmKey
+          ? cleanNumber(row[avgKmKey])
+          : 0,
 
-    totalKm: Number(rider.totalKm.toFixed(3)),
-
-    payableKm: Number(rider.payableKm.toFixed(3)),
-
-    completedDeliveries: rider.completedDeliveries,
-
-    avgKm:
-      rider.completedDeliveries > 0
-        ? Number(
-            (
-              rider.totalKm /
-              rider.completedDeliveries
-            ).toFixed(3)
-          )
-        : 0,
-
-    workingDays: rider.dates.size,
-  }));
+        completedDeliveries: deliveriesKey
+          ? cleanNumber(row[deliveriesKey])
+          : 0,
+      };
+    })
+    .filter(
+      (row) =>
+        row.riderPlatformId &&
+        row.workDate
+    );
 }

@@ -29,7 +29,23 @@ type EmployeeRow = {
   work_location: string | null;
   status: string | null;
   performance: string | null;
+  platform_id?: string | null;
   created_at: string | null;
+};
+
+
+type PerformanceOrderRow = {
+  rider_platform_id: string | null;
+  orders: number | null;
+  platform: string | null;
+  report_month: string | null;
+};
+
+type HungerDailyPerformanceRow = {
+  rider_platform_id: string | null;
+  work_date: string | null;
+  completed_deliveries: number | null;
+  report_month: string | null;
 };
 
 export default function EmployeesPage() {
@@ -45,11 +61,15 @@ function EmployeesDashboardContent() {
   const isAr = lang === "ar";
 
   const [employees, setEmployees] = useState<EmployeeRow[]>([]);
+  const [performanceOrders, setPerformanceOrders] = useState<PerformanceOrderRow[]>([]);
+  const [dailyPerformance, setDailyPerformance] = useState<HungerDailyPerformanceRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
   useEffect(() => {
     loadEmployees();
+    loadPerformanceOrders();
+    loadDailyPerformance();
   }, []);
 
   async function loadEmployees() {
@@ -59,7 +79,7 @@ function EmployeesDashboardContent() {
     const { data, error } = await supabase
       .from("employees")
       .select(
-        "id, name, iqama, phone, nationality, job_title, work_location, status, performance, created_at"
+        "id, name, iqama, phone, nationality, job_title, work_location, status, performance, platform_id, created_at"
       )
       .order("created_at", { ascending: false });
 
@@ -79,6 +99,45 @@ function EmployeesDashboardContent() {
     setLoading(false);
   }
 
+
+  async function loadPerformanceOrders() {
+    const reportMonth = getCurrentReportMonth();
+
+    const { data, error } = await supabase
+      .from("performance_records")
+      .select("rider_platform_id, orders, platform, report_month")
+      .eq("platform", "hunger")
+      .eq("report_month", reportMonth);
+
+    if (error) {
+      console.error("EMPLOYEES PERFORMANCE INDICATOR ERROR:", error);
+      setPerformanceOrders([]);
+      return;
+    }
+
+    setPerformanceOrders((data || []) as PerformanceOrderRow[]);
+  }
+
+  async function loadDailyPerformance() {
+    const reportMonth = getCurrentReportMonth();
+
+    const { data, error } = await supabase
+      .from("hunger_daily_performance")
+      .select(
+        "rider_platform_id, work_date, completed_deliveries, report_month"
+      )
+      .eq("report_month", reportMonth)
+      .order("work_date", { ascending: true });
+
+    if (error) {
+      console.error("EMPLOYEES DAILY PERFORMANCE INDICATOR ERROR:", error);
+      setDailyPerformance([]);
+      return;
+    }
+
+    setDailyPerformance((data || []) as HungerDailyPerformanceRow[]);
+  }
+
   const text = {
     title: isAr ? "لوحة تحكم الموظفين" : "Employees Dashboard",
     subtitle: isAr
@@ -94,7 +153,13 @@ function EmployeesDashboardContent() {
     performanceTitle: isAr
       ? "مؤشر أداء الموظفين"
       : "Employees Performance Indicator",
-    performanceAverage: isAr ? "متوسط الأداء المسجل" : "Recorded Performance Average",
+    performanceAverage: isAr
+      ? "نسبة تحقيق التارجت حتى آخر يوم في التقرير"
+      : "Target Achievement Through Latest Report Day",
+    performanceOrders: isAr ? "الطلبات الفعلية" : "Actual Orders",
+    performanceTarget: isAr ? "التارجت المتوقع" : "Expected Target",
+    performanceRiders: isAr ? "المناديب المحتسبون" : "Counted Riders",
+    performanceAsOf: isAr ? "حتى" : "As of",
 
     employeeStatus: isAr ? "حالة الموظفين" : "Employees Status",
     active: isAr ? "نشط" : "Active",
@@ -161,18 +226,134 @@ function EmployeesDashboardContent() {
     };
   }, [normalizedEmployees]);
 
-  const performanceAverage = useMemo(() => {
-    const scoredEmployees = normalizedEmployees
-      .map((employee) => performanceScore(employee.normalizedPerformance))
-      .filter((score): score is number => score !== null);
+  const performanceSummary = useMemo(() => {
+    const MONTHLY_TARGET_PER_RIDER = 450;
 
-    if (scoredEmployees.length === 0) return 0;
+    /*
+     * المصدر الأساسي للمؤشر هو جدول الأداء اليومي.
+     * نحدد آخر يوم موجود فعليًا في التقرير،
+     * ثم نحسب التارجت النسبي حتى هذا اليوم فقط.
+     */
+    const validDailyRows = dailyPerformance.filter((row) => {
+      return row.work_date && row.rider_platform_id;
+    });
 
-    return Math.round(
-      scoredEmployees.reduce((sum, score) => sum + score, 0) /
-        scoredEmployees.length
+    if (validDailyRows.length === 0) {
+      return {
+        percentage: 0,
+        latestDate: null as string | null,
+        coveredDays: 0,
+        daysInMonth: getDaysInCurrentMonth(),
+        riderCount: 0,
+        totalOrders: 0,
+        expectedTarget: 0,
+      };
+    }
+
+    const latestDate = validDailyRows.reduce((latest, row) => {
+      const current = String(row.work_date || "");
+      return current > latest ? current : latest;
+    }, "");
+
+    const latestDateObject = new Date(`${latestDate}T00:00:00`);
+
+    const coveredDays = Number.isNaN(latestDateObject.getTime())
+      ? 0
+      : latestDateObject.getDate();
+
+    const daysInMonth = Number.isNaN(latestDateObject.getTime())
+      ? getDaysInCurrentMonth()
+      : new Date(
+          latestDateObject.getFullYear(),
+          latestDateObject.getMonth() + 1,
+          0
+        ).getDate();
+
+    /*
+     * نحتسب فقط مناديب هنجر النشطين والمسجل لهم ID.
+     * الموقوف أو في إجازة لا يدخل في تارجت التشغيل الحالي.
+     */
+    const activeHungerRiderIds = new Set(
+      employees
+        .filter((employee) => {
+          const location = String(employee.work_location || "").toLowerCase();
+          const hasHungerLocation =
+            location.includes("hunger") || location.includes("هنجر");
+
+          const hasPlatformId = Boolean(
+            String(employee.platform_id || "").trim()
+          );
+
+          const isActive = normalizeStatus(employee.status) === "active";
+
+          return hasHungerLocation && hasPlatformId && isActive;
+        })
+        .map((employee) => String(employee.platform_id || "").trim())
+        .filter(Boolean)
     );
-  }, [normalizedEmployees]);
+
+    /*
+     * لو لم نستطع التعرف على مناديب هنجر النشطين من جدول الموظفين،
+     * نستخدم IDs الموجودة في التقرير اليومي كحل احتياطي.
+     */
+    const reportRiderIds = new Set(
+      validDailyRows
+        .map((row) => String(row.rider_platform_id || "").trim())
+        .filter(Boolean)
+    );
+
+    const riderIds =
+      activeHungerRiderIds.size > 0 ? activeHungerRiderIds : reportRiderIds;
+
+    const riderCount = riderIds.size;
+
+    if (riderCount === 0 || coveredDays === 0 || daysInMonth === 0) {
+      return {
+        percentage: 0,
+        latestDate,
+        coveredDays,
+        daysInMonth,
+        riderCount,
+        totalOrders: 0,
+        expectedTarget: 0,
+      };
+    }
+
+    /*
+     * نجمع الطلبات اليومية فقط للمناديب الذين يدخلون في حساب التارجت.
+     */
+    const totalOrders = validDailyRows.reduce((sum, row) => {
+      const riderId = String(row.rider_platform_id || "").trim();
+
+      if (!riderIds.has(riderId)) {
+        return sum;
+      }
+
+      return sum + Number(row.completed_deliveries || 0);
+    }, 0);
+
+    const targetPerRiderToDate =
+      (MONTHLY_TARGET_PER_RIDER / daysInMonth) * coveredDays;
+
+    const expectedTarget = targetPerRiderToDate * riderCount;
+
+    const percentage =
+      expectedTarget > 0
+        ? Math.min(100, Math.round((totalOrders / expectedTarget) * 100))
+        : 0;
+
+    return {
+      percentage,
+      latestDate,
+      coveredDays,
+      daysInMonth,
+      riderCount,
+      totalOrders,
+      expectedTarget,
+    };
+  }, [employees, dailyPerformance]);
+
+  const performanceAverage = performanceSummary.percentage;
 
   const jobData = useMemo(
     () =>
@@ -296,6 +477,46 @@ function EmployeesDashboardContent() {
                   </p>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div className="mt-6 grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-xs font-bold text-slate-500">
+                {text.performanceOrders}
+              </p>
+              <p className="mt-1 font-black text-[#0f2544]">
+                {Math.round(performanceSummary.totalOrders).toLocaleString("en-US")}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-xs font-bold text-slate-500">
+                {text.performanceTarget}
+              </p>
+              <p className="mt-1 font-black text-[#0f2544]">
+                {Math.round(performanceSummary.expectedTarget).toLocaleString("en-US")}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-xs font-bold text-slate-500">
+                {text.performanceRiders}
+              </p>
+              <p className="mt-1 font-black text-[#0f2544]">
+                {performanceSummary.riderCount}
+              </p>
+            </div>
+
+            <div className="rounded-2xl bg-slate-50 p-3">
+              <p className="text-xs font-bold text-slate-500">
+                {text.performanceAsOf}
+              </p>
+              <p className="mt-1 font-black text-[#0f2544]">
+                {performanceSummary.latestDate
+                  ? formatSimpleDate(performanceSummary.latestDate, lang)
+                  : "-"}
+              </p>
             </div>
           </div>
         </div>
@@ -544,6 +765,31 @@ function buildGroupedData(
     .slice(0, 8);
 }
 
+
+function getDaysInCurrentMonth() {
+  const date = new Date();
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+}
+
+function formatSimpleDate(dateValue: string, lang: Lang) {
+  const date = new Date(`${dateValue}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return dateValue;
+  }
+
+  return new Intl.DateTimeFormat(lang === "ar" ? "ar-SA" : "en-GB", {
+    day: "numeric",
+    month: "short",
+  }).format(date);
+}
+
+function getCurrentReportMonth() {
+  const date = new Date();
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
 function normalizeStatus(status: string | null) {
   const value = String(status || "").trim().toLowerCase();
 
@@ -664,7 +910,8 @@ function jobTitleText(jobTitle: string, lang: Lang) {
     admin: { ar: "إداري", en: "Administrator" },
 
     "مندوب كيتا": { ar: "مندوب كيتا", en: "Keeta Courier" },
-    "مندوب هنقرستيشن": {
+    "مندوب هنقرستيشن": { 
+      
       ar: "مندوب هنجرستيشن",
       en: "HungerStation Courier",
     },
