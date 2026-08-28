@@ -1,3 +1,4 @@
+"use client";
 
 import Image from "next/image";
 import Link from "next/link";
@@ -13,15 +14,21 @@ import {
 import { ar } from "../locales/ar";
 import { en } from "../locales/en";
 
+import { supabase } from "../app/lib/supabase";
+
 import {
+  AlertTriangle,
   Bell,
   BriefcaseBusiness,
   CalendarDays,
+  CheckCircle2,
   Car,
   ClipboardList,
+  Clock3,
   Droplets,
   FileText,
   Home,
+  IdCard,
   LogOut,
   Menu,
   Settings,
@@ -30,11 +37,20 @@ import {
   Users,
   Wallet,
   Wrench,
+  X,
 } from "lucide-react";
 
 type Lang = "ar" | "en";
 type SystemType = "maintenance" | "employees";
 type Translation = Record<string, string>;
+
+type IqamaNotification = {
+  id: string;
+  name: string;
+  iqama: string;
+  expiryDate: string;
+  daysRemaining: number;
+};
 
 type LanguageContextType = {
   lang: Lang;
@@ -70,6 +86,9 @@ export default function AppLayout({
   const pathname = usePathname();
   const [lang, setLang] = useState<Lang>("ar");
   const [logoutActive, setLogoutActive] = useState(false);
+  const [iqamaAlertCount, setIqamaAlertCount] = useState(0);
+  const [iqamaNotifications, setIqamaNotifications] = useState<IqamaNotification[]>([]);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("lang") as Lang | null;
@@ -77,6 +96,78 @@ export default function AppLayout({
       setLang(saved);
     }
   }, []);
+
+
+  useEffect(() => {
+    if (system !== "employees") {
+      setIqamaAlertCount(0);
+      setIqamaNotifications([]);
+      return;
+    }
+
+    async function loadIqamaNotifications() {
+      const { data, error } = await supabase
+        .from("employees")
+        .select("id,name,iqama,iqama_expiry_date")
+        .not("iqama_expiry_date", "is", null);
+
+      if (error) {
+        console.error("LOAD IQAMA NOTIFICATIONS ERROR:", error);
+        setIqamaAlertCount(0);
+        setIqamaNotifications([]);
+        return;
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const alerts: IqamaNotification[] = (data || [])
+        .map((employee) => {
+          if (!employee.iqama_expiry_date) return null;
+
+          const expiryDate = new Date(
+            `${employee.iqama_expiry_date}T00:00:00`
+          );
+
+          if (Number.isNaN(expiryDate.getTime())) {
+            return null;
+          }
+
+          const daysRemaining = Math.ceil(
+            (expiryDate.getTime() - today.getTime()) /
+              (1000 * 60 * 60 * 24)
+          );
+
+          if (daysRemaining > 30) return null;
+
+          return {
+            id: String(employee.id),
+            name: employee.name || "-",
+            iqama: employee.iqama || "-",
+            expiryDate: employee.iqama_expiry_date,
+            daysRemaining,
+          };
+        })
+        .filter(Boolean) as IqamaNotification[];
+
+      alerts.sort((a, b) => a.daysRemaining - b.daysRemaining);
+
+      setIqamaNotifications(alerts);
+      setIqamaAlertCount(alerts.length);
+    }
+
+    loadIqamaNotifications();
+
+    const handleFocus = () => {
+      loadIqamaNotifications();
+    };
+
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [system, pathname]);
 
   const t: Translation = lang === "ar" ? ar : en;
   const dir = lang === "ar" ? "rtl" : "ltr";
@@ -159,6 +250,24 @@ export default function AppLayout({
                         <span className="text-white">{item.icon}</span>
                         {item.name}
                       </span>
+
+                      {item.href === "/employees/iqama-expiry" &&
+                        iqamaAlertCount > 0 && (
+                          <span
+                            className={`flex min-w-7 items-center justify-center rounded-full px-2 py-1 text-xs font-black shadow-sm ${
+                              active
+                                ? "bg-white text-red-600"
+                                : "bg-red-500 text-white"
+                            }`}
+                            title={
+                              lang === "ar"
+                                ? "إقامات تحتاج متابعة"
+                                : "Iqamas requiring attention"
+                            }
+                          >
+                            {iqamaAlertCount > 99 ? "99+" : iqamaAlertCount}
+                          </span>
+                        )}
                     </Link>
                   );
                 })}
@@ -204,10 +313,165 @@ export default function AppLayout({
                 <CalendarDays className="h-6 w-6 text-slate-600" />
 
                 <div className="relative">
-                  <Bell className="h-6 w-6 text-slate-600" />
-                  <span className="absolute -right-2 -top-2 rounded-full bg-red-600 px-1.5 text-xs text-white">
-                    12
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setNotificationsOpen((current) => !current)}
+                    className={`relative flex h-10 w-10 items-center justify-center rounded-xl border transition ${
+                      notificationsOpen
+                        ? "border-blue-200 bg-blue-50 text-blue-700"
+                        : "border-transparent text-slate-600 hover:border-slate-200 hover:bg-slate-50"
+                    }`}
+                    aria-label={
+                      lang === "ar" ? "الإشعارات" : "Notifications"
+                    }
+                  >
+                    <Bell className="h-6 w-6" />
+
+                    {iqamaAlertCount > 0 && (
+                      <span className="absolute -right-1.5 -top-1.5 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white shadow-sm">
+                        {iqamaAlertCount > 99 ? "99+" : iqamaAlertCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {notificationsOpen && (
+                    <div
+                      className={`absolute top-12 z-[90] w-[360px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.18)] ${
+                        lang === "ar" ? "left-0" : "right-0"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3.5">
+                        <div>
+                          <h3 className="text-sm font-black text-[#102a4c]">
+                            {lang === "ar"
+                              ? "تنبيهات الإقامات"
+                              : "Iqama Alerts"}
+                          </h3>
+
+                          <p className="mt-0.5 text-[11px] font-bold text-slate-400">
+                            {lang === "ar"
+                              ? "الإقامات المنتهية أو التي يتبقى عليها 30 يومًا أو أقل"
+                              : "Expired Iqamas or those with 30 days or less remaining"}
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setNotificationsOpen(false)}
+                          className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200"
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {iqamaNotifications.length === 0 ? (
+                        <div className="flex min-h-[180px] flex-col items-center justify-center px-5 text-center">
+                          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                            <CheckCircle2 className="h-5 w-5" />
+                          </div>
+
+                          <p className="mt-3 text-sm font-black text-[#102a4c]">
+                            {lang === "ar"
+                              ? "لا توجد تنبيهات حاليًا"
+                              : "No alerts right now"}
+                          </p>
+
+                          <p className="mt-1 text-xs font-bold text-slate-400">
+                            {lang === "ar"
+                              ? "كل الإقامات المسجلة خارج نطاق التنبيه."
+                              : "All recorded Iqamas are outside the alert range."}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="max-h-[390px] overflow-y-auto">
+                          {iqamaNotifications.map((notification) => {
+                            const urgent = notification.daysRemaining <= 7;
+                            const expired = notification.daysRemaining < 0;
+                            const important =
+                              notification.daysRemaining > 7 &&
+                              notification.daysRemaining <= 15;
+
+                            return (
+                              <Link
+                                key={notification.id}
+                                href={`/employees/${notification.id}`}
+                                onClick={() => setNotificationsOpen(false)}
+                                className="flex items-start gap-3 border-b border-slate-100 px-4 py-3.5 transition last:border-b-0 hover:bg-slate-50"
+                              >
+                                <div
+                                  className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                                    expired || urgent
+                                      ? "bg-red-50 text-red-600"
+                                      : important
+                                        ? "bg-amber-50 text-amber-600"
+                                        : "bg-blue-50 text-blue-600"
+                                  }`}
+                                >
+                                  {expired || urgent ? (
+                                    <AlertTriangle className="h-5 w-5" />
+                                  ) : (
+                                    <Clock3 className="h-5 w-5" />
+                                  )}
+                                </div>
+
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between gap-3">
+                                    <p className="truncate text-sm font-black text-[#102a4c]">
+                                      {notification.name}
+                                    </p>
+
+                                    <span
+                                      className={`shrink-0 rounded-full px-2 py-1 text-[10px] font-black ${
+                                        expired || urgent
+                                          ? "bg-red-50 text-red-700"
+                                          : important
+                                            ? "bg-amber-50 text-amber-700"
+                                            : "bg-blue-50 text-blue-700"
+                                      }`}
+                                    >
+                                      {formatIqamaAlertLabel(
+                                        notification.daysRemaining,
+                                        lang
+                                      )}
+                                    </span>
+                                  </div>
+
+                                  <p
+                                    dir="ltr"
+                                    className="mt-1 text-[11px] font-bold text-slate-400"
+                                  >
+                                    {notification.iqama}
+                                  </p>
+
+                                  <p className="mt-1 text-[11px] font-semibold text-slate-500">
+                                    {lang === "ar"
+                                      ? `تاريخ الانتهاء: ${formatIqamaDate(
+                                          notification.expiryDate,
+                                          lang
+                                        )}`
+                                      : `Expiry: ${formatIqamaDate(
+                                          notification.expiryDate,
+                                          lang
+                                        )}`}
+                                  </p>
+                                </div>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <Link
+                        href="/employees/iqama-expiry"
+                        onClick={() => setNotificationsOpen(false)}
+                        className="flex h-12 items-center justify-center border-t border-slate-100 bg-slate-50 text-xs font-black text-blue-700 transition hover:bg-blue-50"
+                      >
+                        {lang === "ar"
+                          ? "عرض جميع الإقامات"
+                          : "View All Iqamas"}
+                      </Link>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -233,6 +497,42 @@ export default function AppLayout({
       </main>
     </LanguageContext.Provider>
   );
+}
+
+
+function formatIqamaAlertLabel(daysRemaining: number, lang: Lang) {
+  const isAr = lang === "ar";
+
+  if (daysRemaining < 0) {
+    return isAr
+      ? `منتهية منذ ${Math.abs(daysRemaining)} يوم`
+      : `Expired ${Math.abs(daysRemaining)}d ago`;
+  }
+
+  if (daysRemaining === 0) {
+    return isAr ? "تنتهي اليوم" : "Expires today";
+  }
+
+  return isAr
+    ? `متبقي ${daysRemaining} يوم`
+    : `${daysRemaining} days left`;
+}
+
+function formatIqamaDate(value: string, lang: Lang) {
+  const date = new Date(`${value}T00:00:00`);
+
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(
+    lang === "ar" ? "ar-SA" : "en-GB",
+    {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    }
+  ).format(date);
 }
 
 function getDefaultTitle(system: SystemType, lang: Lang, t: Translation) {
@@ -276,6 +576,11 @@ function getMenuItems(system: SystemType, lang: Lang, t: Translation) {
       name: t.employees || (lang === "ar" ? "الموظفون" : "Employees"),
       href: "/employees/list",
       icon: <Users className="h-7 w-7" />,
+    },
+    {
+      name: lang === "ar" ? "صلاحية الإقامات" : "Iqama Expiry",
+      href: "/employees/iqama-expiry",
+      icon: <IdCard className="h-7 w-7" />,
     },
     {
       name: lang === "ar" ? "متابعة الأداء" : "Rules & Performance",

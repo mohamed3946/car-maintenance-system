@@ -2,22 +2,33 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import AppLayout, { useLanguage } from "../../../components/AppLayout";
-import { supabase } from "../../lib/supabase";
 import {
-  Download,
-  Edit,
-  Eye,
-  Filter,
-  MoreVertical,
-  Plus,
   Search,
-  ShieldAlert,
-  Trash2,
+  Plus,
+  FileSpreadsheet,
+  Users,
   UserCheck,
   UserX,
-  Users,
+  Building2,
+  Bike,
+  UtensilsCrossed,
+  MoreVertical,
+  Eye,
+  Pencil,
+  Trash2,
+  RotateCcw,
+  ChevronDown,
+  BriefcaseBusiness,
+  Smartphone,
+  CreditCard,
+  X,
+  Check,
+  CircleOff,
 } from "lucide-react";
+
+import AppLayout, { useLanguage } from "../../../components/AppLayout";
+import { supabase } from "../../lib/supabase";
+import * as XLSX from "xlsx-js-style";
 
 type Lang = "ar" | "en";
 
@@ -25,20 +36,29 @@ type Employee = {
   id: string;
   name: string;
   iqama: string;
-  phone: string;
-  nationality: string;
-  jobTitle: string;
-  workLocation: string;
-  status: string;
-  performance: string;
+  phone: string | null;
+  email: string | null;
+  nationality: string | null;
+  job_title: string | null;
+  work_location: string | null;
+  status: string | null;
+  performance: string | null;
+  start_date: string | null;
+  photo_url: string | null;
+  platform_id: string | null;
+  keeta_id: string | null;
+  hunger_id: string | null;
+  vehicle_number: string | null;
 };
+
+type EmployeeStatus = "active" | "stopped" | "vacation" | "outOfService";
 
 export default function EmployeesListPage() {
   return (
     <AppLayout
       system="employees"
-      title="قائمة الموظفين"
-      subtitle="إدارة وعرض جميع بيانات الموظفين والمناديب"
+      titleKey="employeesList"
+      subtitleKey="employeesListSubtitle"
     >
       <EmployeesListContent />
     </AppLayout>
@@ -46,38 +66,91 @@ export default function EmployeesListPage() {
 }
 
 function EmployeesListContent() {
-  const { lang, t } = useLanguage();
+  const { lang } = useLanguage();
   const isAr = lang === "ar";
 
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("all");
-  const [workLocation, setWorkLocation] = useState("all");
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  const [openStatusId, setOpenStatusId] = useState<string | null>(null);
-  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
-  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [locationFilter, setLocationFilter] = useState("all");
+  const [jobFilter, setJobFilter] = useState("all");
+
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [openStatusMenu, setOpenStatusMenu] = useState<string | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const t = {
+    title: isAr ? "قائمة الموظفين" : "Employees",
+    subtitle: isAr
+      ? "ابحث، فلتر، راجع وعدّل بيانات الموظفين من مكان واحد."
+      : "Search, filter, review and update employee data from one place.",
+
+    addEmployee: isAr ? "إضافة موظف" : "Add Employee",
+    export: isAr ? "تصدير Excel" : "Export Excel",
+
+    total: isAr ? "إجمالي الموظفين" : "Total Employees",
+    active: isAr ? "الموظفون النشطون" : "Active Employees",
+    inactive: isAr ? "الموظفون غير النشطين" : "Inactive Employees",
+    outOfService: isAr ? "خارج الخدمة" : "Out of Service",
+    management: isAr ? "موظفو الإدارة" : "Management Staff",
+    hunger: isAr ? "موظفو هنجرستيشن" : "HungerStation Staff",
+    keeta: isAr ? "موظفو كيتا" : "Keeta Staff",
+
+    searchPlaceholder: isAr
+      ? "ابحث باسم الموظف أو الإقامة أو الجوال أو ID المنصة..."
+      : "Search by name, Iqama, phone or platform ID...",
+
+    allStatuses: isAr ? "كل الحالات" : "All Statuses",
+    allLocations: isAr ? "كل مواقع العمل" : "All Locations",
+    allJobs: isAr ? "كل المسميات" : "All Job Titles",
+
+    employee: isAr ? "الموظف" : "Employee",
+    iqama: isAr ? "الإقامة" : "Iqama",
+    phone: isAr ? "الجوال" : "Phone",
+    nationality: isAr ? "الجنسية" : "Nationality",
+    job: isAr ? "المسمى" : "Job Title",
+    location: isAr ? "موقع العمل" : "Work Location",
+    status: isAr ? "الحالة" : "Status",
+    performance: isAr ? "الأداء" : "Performance",
+    actions: isAr ? "الإجراءات" : "Actions",
+
+    view: isAr ? "عرض التفاصيل" : "View Details",
+    edit: isAr ? "تعديل" : "Edit",
+    delete: isAr ? "حذف" : "Delete",
+
+    deleteConfirm: isAr
+      ? "هل أنت متأكد من حذف هذا الموظف؟ لا يمكن التراجع عن الحذف."
+      : "Are you sure you want to delete this employee? This action cannot be undone.",
+
+    deleteError: isAr
+      ? "حدث خطأ أثناء حذف الموظف."
+      : "An error occurred while deleting the employee.",
+
+    statusUpdateError: isAr
+      ? "تعذر تحديث حالة الموظف."
+      : "Could not update employee status.",
+
+    clearFilters: isAr ? "مسح الفلاتر" : "Clear Filters",
+    noResults: isAr ? "لا توجد نتائج مطابقة" : "No matching employees found",
+    results: isAr ? "عدد النتائج" : "Results",
+    loading: isAr ? "جاري تحميل الموظفين..." : "Loading employees...",
+  };
 
   useEffect(() => {
     loadEmployees();
   }, []);
 
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      const target = event.target as HTMLElement;
+    const closeMenus = () => {
+      setOpenMenu(null);
+      setOpenStatusMenu(null);
+    };
 
-      if (!target.closest("[data-actions-menu]")) {
-        setOpenMenuId(null);
-      }
-
-      if (!target.closest("[data-status-menu]")) {
-        setOpenStatusId(null);
-      }
-    }
-
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
+    window.addEventListener("click", closeMenus);
+    return () => window.removeEventListener("click", closeMenus);
   }, []);
 
   async function loadEmployees() {
@@ -85,173 +158,219 @@ function EmployeesListContent() {
 
     const { data, error } = await supabase
       .from("employees")
-      .select("*")
-      .order("created_at", { ascending: false });
+      .select(`
+        id,
+        name,
+        iqama,
+        phone,
+        email,
+        nationality,
+        job_title,
+        work_location,
+        status,
+        performance,
+        start_date,
+        photo_url,
+        platform_id,
+        keeta_id,
+        hunger_id,
+        vehicle_number
+      `)
+      .order("name", { ascending: true });
 
     if (error) {
       console.error("LOAD EMPLOYEES ERROR:", error);
-      alert(isAr ? "حدث خطأ أثناء تحميل الموظفين" : "Error loading employees");
+      setEmployees([]);
       setLoading(false);
       return;
     }
 
-    const employeesData: Employee[] =
-      data?.map((item: any) => ({
-        id: item.id,
-        name: item.name || "",
-        iqama: item.iqama || "",
-        phone: item.phone || "",
-        nationality: item.nationality || "",
-        jobTitle: item.job_title || "",
-        workLocation: item.work_location || "",
-        status: item.status || "active",
-        performance: item.performance || "good",
-      })) || [];
-
-    setEmployees(employeesData);
+    setEmployees((data || []) as Employee[]);
     setLoading(false);
   }
 
-  const text = {
-    title: isAr ? "قائمة الموظفين" : "Employees List",
-    desc: isAr
-      ? "ابحث، فلتر، راجع، وعدّل بيانات الموظفين من مكان واحد."
-      : "Search, filter, review, and edit employees from one place.",
-    add: isAr ? "إضافة موظف" : "Add Employee",
-    export: isAr ? "تصدير" : "Export",
-    search: isAr ? "ابحث عن موظف..." : "Search employee...",
-    allStatuses: isAr ? "كل الحالات" : "All Statuses",
-    allLocations: isAr ? "كل مواقع العمل" : "All Work Locations",
-    total: isAr ? "إجمالي الموظفين" : "Total Employees",
-    active: isAr ? "النشطين" : "Active",
-    stopped: isAr ? "المتوقفين" : "Stopped",
-    employee: isAr ? "الموظف" : "Employee",
-    iqama: isAr ? "الإقامة" : "Iqama",
-    phone: isAr ? "الجوال" : "Phone",
-    nationality: isAr ? "الجنسية" : "Nationality",
-    job: isAr ? "المسمى" : "Job Title",
-    location: isAr ? "موقع العمل" : "Work Location",
-    empStatus: isAr ? "الحالة" : "Status",
-    performance: isAr ? "الأداء" : "Performance",
-    actions: isAr ? "الإجراءات" : "Actions",
-    viewDetails: isAr ? "عرض التفاصيل" : "View Details",
-    edit: isAr ? "تعديل" : "Edit",
-    stop: isAr ? "إيقاف" : "Stop",
-    reactivate: isAr ? "إعادة تفعيل" : "Reactivate",
-    delete: isAr ? "حذف" : "Delete",
-    save: isAr ? "حفظ التعديل" : "Save Changes",
-    cancel: isAr ? "إلغاء" : "Cancel",
-    loading: isAr ? "جاري تحميل البيانات..." : "Loading data...",
-    noData: isAr ? "لا توجد بيانات موظفين" : "No employees found",
-    resultsCount: isAr ? "عدد الموظفين الظاهرين" : "Visible Employees",
-    totalCount: isAr ? "إجمالي الموظفين" : "Total Employees",
-    updatingStatus: isAr ? "جاري التحديث..." : "Updating...",
-  };
+  const stats = useMemo(() => {
+    const total = employees.length;
 
-  const filtered = useMemo(() => {
+    const active = employees.filter(
+      (employee) => normalizeStatus(employee.status) === "active"
+    ).length;
+
+    const inactive = employees.filter(
+      (employee) => normalizeStatus(employee.status) === "stopped"
+    ).length;
+
+    const outOfService = employees.filter(
+      (employee) => normalizeStatus(employee.status) === "outOfService"
+    ).length;
+
+    const management = employees.filter((employee) => {
+      const location = employee.work_location || "";
+      return location === "management" || location === "الإدارة";
+    }).length;
+
+    const hunger = employees.filter((employee) => {
+      const location = employee.work_location || "";
+      return location === "HungerStation" || location === "KeetaAndHungerStation";
+    }).length;
+
+    const keeta = employees.filter((employee) => {
+      const location = employee.work_location || "";
+      return location === "Keeta" || location === "KeetaAndHungerStation";
+    }).length;
+
+    return {
+      total,
+      active,
+      inactive,
+      outOfService,
+      management,
+      hunger,
+      keeta,
+    };
+  }, [employees]);
+
+  const availableLocations = useMemo(() => {
+    return Array.from(
+      new Set(
+        employees
+          .map((employee) => employee.work_location)
+          .filter(Boolean) as string[]
+      )
+    );
+  }, [employees]);
+
+  const availableJobs = useMemo(() => {
+    return Array.from(
+      new Set(
+        employees
+          .map((employee) => employee.job_title)
+          .filter(Boolean) as string[]
+      )
+    );
+  }, [employees]);
+
+  const filteredEmployees = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
     return employees.filter((employee) => {
-      const searchText = [
+      const searchableValues = [
         employee.name,
         employee.iqama,
         employee.phone,
-        employee.nationality,
-        jobTitleText(employee.jobTitle, lang),
-        workLocationText(employee.workLocation, lang),
-        statusText(employee.status, lang),
-        performanceText(employee.performance, lang),
+        employee.email,
+        employee.platform_id,
+        employee.keeta_id,
+        employee.hunger_id,
       ]
+        .filter(Boolean)
         .join(" ")
         .toLowerCase();
 
-      const matchesQuery = searchText.includes(query.toLowerCase());
+      const matchesSearch =
+        query.length === 0 || searchableValues.includes(query);
+
       const matchesStatus =
-        status === "all" ||
-        normalizeEmployeeStatus(employee.status) === status;
+        statusFilter === "all" ||
+        normalizeStatus(employee.status) === statusFilter;
 
       const matchesLocation =
-        workLocation === "all" ||
-        normalizeWorkLocation(employee.workLocation) === workLocation;
+        locationFilter === "all" ||
+        (locationFilter === "HungerStation"
+          ? employee.work_location === "HungerStation" ||
+            employee.work_location === "KeetaAndHungerStation"
+          : locationFilter === "Keeta"
+          ? employee.work_location === "Keeta" ||
+            employee.work_location === "KeetaAndHungerStation"
+          : employee.work_location === locationFilter);
 
-      return matchesQuery && matchesStatus && matchesLocation;
+      const matchesJob =
+        jobFilter === "all" || employee.job_title === jobFilter;
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesLocation &&
+        matchesJob
+      );
     });
-  }, [employees, query, status, workLocation, lang]);
+  }, [
+    employees,
+    search,
+    statusFilter,
+    locationFilter,
+    jobFilter,
+  ]);
 
-  async function saveEdit() {
-    if (!editingEmployee) return;
+  const hasFilters =
+    search.trim() !== "" ||
+    statusFilter !== "all" ||
+    locationFilter !== "all" ||
+    jobFilter !== "all";
 
-    if (!editingEmployee.name.trim()) {
-      alert(isAr ? "اكتب اسم الموظف" : "Enter employee name");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("employees")
-      .update({
-        name: editingEmployee.name,
-        iqama: editingEmployee.iqama,
-        phone: editingEmployee.phone,
-        nationality: editingEmployee.nationality,
-        job_title: editingEmployee.jobTitle,
-        work_location: editingEmployee.workLocation,
-        status: editingEmployee.status,
-        performance: editingEmployee.performance,
-      })
-      .eq("id", editingEmployee.id);
-
-    if (error) {
-      console.error("UPDATE EMPLOYEE ERROR:", error);
-      alert(isAr ? "فشل تعديل الموظف" : "Failed to update employee");
-      return;
-    }
-
-    setEditingEmployee(null);
-    await loadEmployees();
+  function resetFilters() {
+    setSearch("");
+    setStatusFilter("all");
+    setLocationFilter("all");
+    setJobFilter("all");
   }
 
-  async function toggleEmployeeStatus(employee: Employee) {
-    const nextStatus = employee.status === "stopped" ? "active" : "stopped";
+  function applyStatFilter(
+    type: "all" | "active" | "inactive" | "outOfService" | "management" | "hunger" | "keeta"
+  ) {
+    setSearch("");
+    setJobFilter("all");
+    setStatusFilter("all");
+    setLocationFilter("all");
 
-    const message =
-      employee.status === "stopped"
-        ? isAr
-          ? `هل تريد إعادة ${employee.name} للعمل؟`
-          : `Reactivate ${employee.name}?`
-        : isAr
-          ? `هل تريد إيقاف ${employee.name}؟`
-          : `Stop ${employee.name}?`;
+    if (type === "active") setStatusFilter("active");
+    if (type === "inactive") setStatusFilter("stopped");
+    if (type === "outOfService") setStatusFilter("outOfService");
+    if (type === "management") setLocationFilter("management");
+    if (type === "hunger") setLocationFilter("HungerStation");
+    if (type === "keeta") setLocationFilter("Keeta");
+  }
 
-    if (!confirm(message)) return;
+  function isStatCardActive(
+    type: "all" | "active" | "inactive" | "outOfService" | "management" | "hunger" | "keeta"
+  ) {
+    if (type === "all") {
+      return statusFilter === "all" && locationFilter === "all" && jobFilter === "all" && !search;
+    }
+
+    if (type === "active") return statusFilter === "active" && locationFilter === "all";
+    if (type === "inactive") return statusFilter === "stopped" && locationFilter === "all";
+    if (type === "outOfService") return statusFilter === "outOfService" && locationFilter === "all";
+    if (type === "management") return locationFilter === "management" && statusFilter === "all";
+    if (type === "hunger") return locationFilter === "HungerStation" && statusFilter === "all";
+    if (type === "keeta") return locationFilter === "Keeta" && statusFilter === "all";
+
+    return false;
+  }
+
+  async function updateEmployeeStatus(
+    employee: Employee,
+    newStatus: EmployeeStatus
+  ) {
+    if (normalizeStatus(employee.status) === newStatus) {
+      setOpenStatusMenu(null);
+      return;
+    }
+
+    setUpdatingStatusId(employee.id);
 
     const { error } = await supabase
       .from("employees")
-      .update({ status: nextStatus })
+      .update({ status: newStatus })
       .eq("id", employee.id);
 
     if (error) {
-      console.error("TOGGLE EMPLOYEE STATUS ERROR:", error);
-      alert(isAr ? "فشل تغيير حالة الموظف" : "Failed to change employee status");
+      console.error("UPDATE EMPLOYEE STATUS ERROR:", error);
+      alert(t.statusUpdateError);
+      setUpdatingStatusId(null);
       return;
     }
 
-    setOpenMenuId(null);
-    await loadEmployees();
-  }
-
-  async function changeEmployeeStatus(
-    employee: Employee,
-    newStatus: string
-  ) {
-    if (employee.status === newStatus || updatingStatusId === employee.id) {
-      setOpenStatusId(null);
-      return;
-    }
-
-    const previousStatus = employee.status;
-
-    setUpdatingStatusId(employee.id);
-    setOpenStatusId(null);
-
-    // تحديث فوري في الواجهة
     setEmployees((current) =>
       current.map((item) =>
         item.id === employee.id
@@ -260,39 +379,19 @@ function EmployeesListContent() {
       )
     );
 
-    const { error } = await supabase
-      .from("employees")
-      .update({ status: newStatus })
-      .eq("id", employee.id);
-
-    if (error) {
-      console.error("CHANGE EMPLOYEE STATUS ERROR:", error);
-
-      // الرجوع للحالة القديمة إذا فشل الحفظ
-      setEmployees((current) =>
-        current.map((item) =>
-          item.id === employee.id
-            ? { ...item, status: previousStatus }
-            : item
-        )
-      );
-
-      alert(
-        isAr
-          ? "فشل تحديث حالة الموظف"
-          : "Failed to update employee status"
-      );
-    }
-
     setUpdatingStatusId(null);
+    setOpenStatusMenu(null);
   }
 
   async function deleteEmployee(employee: Employee) {
-    const message = isAr
-      ? `هل أنت متأكد من حذف ${employee.name}؟`
-      : `Are you sure you want to delete ${employee.name}?`;
+    const ok = window.confirm(
+      `${t.deleteConfirm}\n\n${employee.name}`
+    );
 
-    if (!confirm(message)) return;
+    if (!ok) return;
+
+    setDeletingId(employee.id);
+    setOpenMenu(null);
 
     const { error } = await supabase
       .from("employees")
@@ -301,555 +400,1356 @@ function EmployeesListContent() {
 
     if (error) {
       console.error("DELETE EMPLOYEE ERROR:", error);
-      alert(isAr ? "فشل حذف الموظف" : "Failed to delete employee");
+      alert(t.deleteError);
+      setDeletingId(null);
       return;
     }
 
-    setOpenMenuId(null);
-    await loadEmployees();
+    setEmployees((current) =>
+      current.filter((item) => item.id !== employee.id)
+    );
+
+    setDeletingId(null);
   }
 
   function exportEmployees() {
-    const headers = isAr
-      ? ["الاسم", "الإقامة", "الجوال", "الجنسية", "المسمى الوظيفي", "موقع العمل", "الحالة", "الأداء"]
-      : ["Name", "Iqama", "Phone", "Nationality", "Job Title", "Work Location", "Status", "Performance"];
+    if (filteredEmployees.length === 0) return;
 
-    const rows = filtered.map((employee) => [
-      employee.name,
-      employee.iqama,
-      employee.phone,
-      employee.nationality,
-      jobTitleText(employee.jobTitle, lang),
-      workLocationText(employee.workLocation, lang),
-      statusText(employee.status, lang),
-      performanceText(employee.performance, lang),
-    ]);
+    const exportRows: Record<string, string | number>[] = [];
 
-    const csvContent = [
-      headers.join(";"),
-      ...rows.map((row) =>
-        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(";")
-      ),
-    ].join("\n");
+    filteredEmployees.forEach((employee) => {
+      const common = {
+        [isAr ? "اسم الموظف" : "Employee Name"]: employee.name || "-",
+        [isAr ? "رقم الإقامة" : "Iqama"]: employee.iqama || "-",
+        [isAr ? "رقم الجوال" : "Phone"]: employee.phone || "-",
+        [isAr ? "الجنسية" : "Nationality"]: employee.nationality || "-",
+        [isAr ? "المسمى الوظيفي" : "Job Title"]: jobTitleText(employee.job_title, lang),
+        [isAr ? "موقع العمل" : "Work Location"]: workLocationText(employee.work_location, lang),
+        [isAr ? "الحالة" : "Status"]: statusText(employee.status, lang),
+        [isAr ? "الأداء" : "Performance"]: performanceText(employee.performance, lang),
+        [isAr ? "رقم المركبة" : "Vehicle Number"]: employee.vehicle_number || "-",
+      };
 
-    const blob = new Blob(["\uFEFF" + csvContent], {
-      type: "text/csv;charset=utf-8;",
+      const location = employee.work_location;
+
+      if (location === "KeetaAndHungerStation") {
+        exportRows.push({
+          ...common,
+          [isAr ? "التطبيق" : "Application"]: "HungerStation",
+          [isAr ? "رقم ID" : "Platform ID"]: employee.hunger_id || "-",
+        });
+
+        exportRows.push({
+          ...common,
+          [isAr ? "التطبيق" : "Application"]: "Keeta",
+          [isAr ? "رقم ID" : "Platform ID"]: employee.keeta_id || "-",
+        });
+        return;
+      }
+
+      if (location === "HungerStation") {
+        exportRows.push({
+          ...common,
+          [isAr ? "التطبيق" : "Application"]: "HungerStation",
+          [isAr ? "رقم ID" : "Platform ID"]:
+            employee.hunger_id || employee.platform_id || "-",
+        });
+        return;
+      }
+
+      if (location === "Keeta") {
+        exportRows.push({
+          ...common,
+          [isAr ? "التطبيق" : "Application"]: "Keeta",
+          [isAr ? "رقم ID" : "Platform ID"]:
+            employee.keeta_id || employee.platform_id || "-",
+        });
+        return;
+      }
+
+      // لو الموظف غير مرتبط بتطبيق توصيل، يتم تصديره كسطر واحد.
+      exportRows.push({
+        ...common,
+        [isAr ? "التطبيق" : "Application"]: "-",
+        [isAr ? "رقم ID" : "Platform ID"]: "-",
+      });
     });
 
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = isAr
-      ? `سجل-الموظفين-${new Date().toISOString().slice(0, 10)}.csv`
-      : `employees-list-${new Date().toISOString().slice(0, 10)}.csv`;
+    const numberedRows = exportRows.map((row, index) => ({
+      [isAr ? "م" : "#"]: index + 1,
+      ...row,
+    }));
 
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const worksheet = XLSX.utils.json_to_sheet(numberedRows);
+    const range = XLSX.utils.decode_range(worksheet["!ref"] || "A1:A1");
+
+    worksheet["!cols"] = [
+      { wch: 6 },
+      { wch: 34 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 23 },
+      { wch: 16 },
+      { wch: 16 },
+      { wch: 18 },
+      { wch: 22 },
+      { wch: 22 },
+    ];
+
+    worksheet["!rows"] = [{ hpt: 28 }];
+    worksheet["!freeze"] = { xSplit: 0, ySplit: 1 };
+    worksheet["!autofilter"] = { ref: worksheet["!ref"] || "A1:A1" };
+
+    for (let C = range.s.c; C <= range.e.c; C++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: C });
+      if (!worksheet[cellAddress]) continue;
+
+      worksheet[cellAddress].s = {
+        fill: { fgColor: { rgb: "0F2544" } },
+        font: { color: { rgb: "FFFFFF" }, bold: true, sz: 11 },
+        alignment: {
+          horizontal: "center",
+          vertical: "center",
+        },
+        border: {
+          top: { style: "thin", color: { rgb: "D9E2EF" } },
+          bottom: { style: "thin", color: { rgb: "D9E2EF" } },
+          left: { style: "thin", color: { rgb: "D9E2EF" } },
+          right: { style: "thin", color: { rgb: "D9E2EF" } },
+        },
+      };
+    }
+
+    for (let R = 1; R <= range.e.r; R++) {
+      for (let C = range.s.c; C <= range.e.c; C++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: R, c: C });
+        if (!worksheet[cellAddress]) continue;
+
+        worksheet[cellAddress].s = {
+          font: {
+            bold: C === 1 || C === 10 || C === 11,
+            color: { rgb: "0F2544" },
+          },
+          alignment: {
+            horizontal: C === 1 ? (isAr ? "right" : "left") : "center",
+            vertical: "center",
+          },
+          fill: {
+            fgColor: { rgb: R % 2 === 0 ? "F8FBFF" : "FFFFFF" },
+          },
+          border: {
+            top: { style: "thin", color: { rgb: "E5E7EB" } },
+            bottom: { style: "thin", color: { rgb: "E5E7EB" } },
+            left: { style: "thin", color: { rgb: "E5E7EB" } },
+            right: { style: "thin", color: { rgb: "E5E7EB" } },
+          },
+        };
+      }
+    }
+
+    // تمييز أعمدة التطبيق و ID.
+    for (let R = 1; R <= range.e.r; R++) {
+      const appCell = XLSX.utils.encode_cell({ r: R, c: 10 });
+      const idCell = XLSX.utils.encode_cell({ r: R, c: 11 });
+
+      if (worksheet[appCell]) {
+        worksheet[appCell].s = {
+          ...worksheet[appCell].s,
+          font: { bold: true, color: { rgb: "087A55" } },
+          fill: { fgColor: { rgb: "EAF9F1" } },
+        };
+      }
+
+      if (worksheet[idCell]) {
+        worksheet[idCell].s = {
+          ...worksheet[idCell].s,
+          font: { bold: true, color: { rgb: "0F2544" } },
+          fill: { fgColor: { rgb: "F1F5F9" } },
+        };
+      }
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(
+      workbook,
+      worksheet,
+      isAr ? "الموظفون" : "Employees"
+    );
+
+    XLSX.writeFile(
+      workbook,
+      `Employees-${new Date().toISOString().slice(0, 10)}.xlsx`
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex min-h-[420px] items-center justify-center">
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-6 py-4 shadow-sm">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+          <span className="text-sm font-bold text-slate-600">
+            {t.loading}
+          </span>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <>
-      <div className="mb-6 flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+    <div
+      dir={isAr ? "rtl" : "ltr"}
+      className="space-y-5 pb-8"
+    >
+      {/* PAGE HEADER */}
+      <section className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
         <div>
-          <h1 className="text-3xl font-extrabold text-[#0f2544]">
-            {text.title}
+          <h1 className="text-2xl font-black text-[#102a4c] md:text-3xl">
+            {t.title}
           </h1>
-          <p className="mt-1 text-sm text-slate-500">{text.desc}</p>
+
+          <p className="mt-1 text-sm font-medium text-slate-500">
+            {t.subtitle}
+          </p>
         </div>
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={exportEmployees}
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-700 shadow-sm transition hover:bg-slate-50"
+          >
+            <FileSpreadsheet className="h-4 w-4 text-green-600" />
+            {t.export}
+          </button>
+
           <Link
             href="/employees/add"
-            className="inline-flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-extrabold text-white shadow-sm hover:bg-blue-700"
+            className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 text-sm font-extrabold text-white shadow-sm transition hover:bg-blue-700"
           >
             <Plus className="h-5 w-5" />
-            {text.add}
+            {t.addEmployee}
           </Link>
-
-          <button
-            onClick={exportEmployees}
-            className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-extrabold text-slate-700 shadow-sm hover:bg-slate-50"
-          >
-            <Download className="h-5 w-5" />
-            {text.export}
-          </button>
         </div>
-      </div>
+      </section>
 
-      <div className="mb-6 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-        <StatCard title={text.total} value={employees.length} icon={<Users className="h-7 w-7" />} color="blue" />
-        <StatCard title={text.active} value={employees.filter((e) => e.status === "active").length} icon={<Users className="h-7 w-7" />} color="green" />
-        <StatCard title={text.stopped} value={employees.filter((e) => e.status === "stopped").length} icon={<ShieldAlert className="h-7 w-7" />} color="red" />
-      </div>
+      {/* CIRCULAR STATS - CLICK TO FILTER */}
+      <section className="rounded-[24px] border border-slate-200 bg-white px-4 py-5 shadow-sm md:px-6">
+        <div className="grid grid-cols-2 gap-x-3 gap-y-6 sm:grid-cols-4 xl:grid-cols-7">
+          <CircleStatCard
+            title={t.total}
+            value={stats.total}
+            tone="blue"
+            icon={<Users className="h-5 w-5" />}
+            active={isStatCardActive("all")}
+            onClick={() => applyStatFilter("all")}
+          />
 
-      <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-          <div className="relative">
-            <Search className="absolute right-4 top-3.5 h-5 w-5 text-slate-400" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={text.search}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pr-12 text-sm font-bold outline-none focus:border-blue-500"
+          <CircleStatCard
+            title={t.active}
+            value={stats.active}
+            tone="green"
+            icon={<UserCheck className="h-5 w-5" />}
+            active={isStatCardActive("active")}
+            onClick={() => applyStatFilter("active")}
+          />
+
+          <CircleStatCard
+            title={t.inactive}
+            value={stats.inactive}
+            tone="red"
+            icon={<UserX className="h-5 w-5" />}
+            active={isStatCardActive("inactive")}
+            onClick={() => applyStatFilter("inactive")}
+          />
+
+          <CircleStatCard
+            title={t.outOfService}
+            value={stats.outOfService}
+            tone="dark"
+            icon={<CircleOff className="h-5 w-5" />}
+            active={isStatCardActive("outOfService")}
+            onClick={() => applyStatFilter("outOfService")}
+          />
+
+          <CircleStatCard
+            title={t.management}
+            value={stats.management}
+            tone="slate"
+            icon={<Building2 className="h-5 w-5" />}
+            active={isStatCardActive("management")}
+            onClick={() => applyStatFilter("management")}
+          />
+
+          <CircleStatCard
+            title={t.hunger}
+            value={stats.hunger}
+            tone="hungerGreen"
+            icon={<UtensilsCrossed className="h-5 w-5" />}
+            active={isStatCardActive("hunger")}
+            onClick={() => applyStatFilter("hunger")}
+          />
+
+          <CircleStatCard
+            title={t.keeta}
+            value={stats.keeta}
+            tone="purple"
+            icon={<Bike className="h-5 w-5" />}
+            active={isStatCardActive("keeta")}
+            onClick={() => applyStatFilter("keeta")}
+          />
+        </div>
+      </section>
+
+      {/* FILTERS */}
+      <section className="rounded-[22px] border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+          <div className="relative flex-1">
+            <Search
+              className={`absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 ${
+                isAr ? "right-4" : "left-4"
+              }`}
             />
+
+            <input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder={t.searchPlaceholder}
+              className={`h-11 w-full rounded-xl border border-slate-200 bg-slate-50 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-50 ${
+                isAr ? "pr-11 pl-10" : "pl-11 pr-10"
+              }`}
+            />
+
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className={`absolute top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700 ${
+                  isAr ? "left-3" : "right-3"
+                }`}
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
           </div>
 
-          <div className="relative">
-            <Filter className="absolute right-4 top-3.5 h-5 w-5 text-slate-400" />
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pr-12 text-sm font-bold outline-none focus:border-blue-500"
+          <FilterSelect
+            value={statusFilter}
+            onChange={setStatusFilter}
+            isAr={isAr}
+          >
+            <option value="all">{t.allStatuses}</option>
+            <option value="active">
+              {isAr ? "نشط" : "Active"}
+            </option>
+            <option value="stopped">
+              {isAr ? "غير نشط" : "Inactive"}
+            </option>
+            <option value="vacation">
+              {isAr ? "إجازة" : "Vacation"}
+            </option>
+            <option value="outOfService">
+              {isAr ? "خارج الخدمة" : "Out Of Service"}
+            </option>
+          </FilterSelect>
+
+          <FilterSelect
+            value={locationFilter}
+            onChange={setLocationFilter}
+            isAr={isAr}
+          >
+            <option value="all">{t.allLocations}</option>
+
+            {availableLocations.map((location) => (
+              <option key={location} value={location}>
+                {workLocationText(location, lang)}
+              </option>
+            ))}
+          </FilterSelect>
+
+          <FilterSelect
+            value={jobFilter}
+            onChange={setJobFilter}
+            isAr={isAr}
+          >
+            <option value="all">{t.allJobs}</option>
+
+            {availableJobs.map((job) => (
+              <option key={job} value={job}>
+                {jobTitleText(job, lang)}
+              </option>
+            ))}
+          </FilterSelect>
+
+          {hasFilters && (
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
             >
-              <option value="all">{text.allStatuses}</option>
-              <option value="active">{statusText("active", lang)}</option>
-              <option value="stopped">{statusText("stopped", lang)}</option>
-              <option value="vacation">{statusText("vacation", lang)}</option>
-              <option value="outOfService">{statusText("outOfService", lang)}</option>
-            </select>
+              <RotateCcw className="h-4 w-4" />
+              {t.clearFilters}
+            </button>
+          )}
+        </div>
+      </section>
+
+      {/* TABLE */}
+      <section className="overflow-visible rounded-[22px] border border-slate-200 bg-white shadow-sm">
+        <div className="flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3.5">
+          <div>
+            <h2 className="text-base font-black text-[#102a4c]">
+              {isAr ? "سجل الموظفين" : "Employee Directory"}
+            </h2>
+
+            <p className="mt-0.5 text-xs font-semibold text-slate-400">
+              {isAr
+                ? "عرض وإدارة جميع الموظفين"
+                : "View and manage all employees"}
+            </p>
           </div>
 
-          <div className="relative">
-            <Filter className="absolute right-4 top-3.5 h-5 w-5 text-slate-400" />
-            <select
-              value={workLocation}
-              onChange={(e) => setWorkLocation(e.target.value)}
-              className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pr-12 text-sm font-bold outline-none focus:border-blue-500"
-            >
-              <option value="all">{text.allLocations}</option>
-              <option value="Keeta">Keeta</option>
-              <option value="HungerStation">HungerStation</option>
-              <option value="management">{workLocationText("management", lang)}</option>
-              <option value="maintenance">{workLocationText("maintenance", lang)}</option>
-            </select>
+          <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs font-bold text-slate-500">
+            {t.results}:{" "}
+            <span className="font-black text-[#102a4c]">
+              {filteredEmployees.length}
+            </span>
           </div>
         </div>
-      </div>
 
-      <div className="overflow-visible rounded-3xl border border-slate-200 bg-white shadow-sm">
-        {loading ? (
-          <div className="p-8 text-center font-bold text-slate-500">
-            {text.loading}
+        {filteredEmployees.length === 0 ? (
+          <div className="flex min-h-[300px] flex-col items-center justify-center px-6 text-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
+              <Search className="h-6 w-6" />
+            </div>
+
+            <h3 className="mt-4 text-base font-black text-[#102a4c]">
+              {t.noResults}
+            </h3>
+
+            <button
+              type="button"
+              onClick={resetFilters}
+              className="mt-4 rounded-xl bg-blue-50 px-4 py-2 text-sm font-extrabold text-blue-700 hover:bg-blue-100"
+            >
+              {t.clearFilters}
+            </button>
           </div>
         ) : (
-          <>
-            {filtered.length === 0 ? (
-              <div className="p-8 text-center font-bold text-slate-500">
-                {text.noData}
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table
-                  dir={isAr ? "rtl" : "ltr"}
-                  className="w-full min-w-[1150px] text-sm"
-                >
-            <thead className="bg-slate-50 text-slate-500">
-              <tr>
-                <th className="p-4 text-start">{text.employee}</th>
-                <th className="p-4 text-start">{text.iqama}</th>
-                <th className="p-4 text-start">{text.phone}</th>
-                <th className="p-4 text-start">{text.nationality}</th>
-                <th className="p-4 text-start">{text.job}</th>
-                <th className="p-4 text-start">{text.location}</th>
-                <th className="p-4 text-start">{text.empStatus}</th>
-                <th className="p-4 text-start">{text.performance}</th>
-                <th className="p-4 text-start">{text.actions}</th>
-              </tr>
-            </thead>
+          <div className="overflow-x-auto overflow-y-visible">
+            <table className="w-full min-w-[1120px] border-collapse">
+              <thead className="bg-slate-50">
+                <tr className="border-b border-slate-200">
+                  <TableHead className="min-w-[360px]">
+                    {t.employee}
+                  </TableHead>
 
-            <tbody>
-              {filtered.map((employee) => (
-                <tr key={employee.id} className="border-t border-slate-100 hover:bg-slate-50">
-                  <td className="p-4 font-extrabold text-[#0f2544]">
-                    <Link href={`/employees/${employee.id}`} className="hover:text-blue-700 hover:underline">
-                      {employee.name}
-                    </Link>
-                  </td>
-                  <td className="p-4 font-bold text-slate-600">{employee.iqama}</td>
-                  <td className="p-4 font-bold text-slate-600">{employee.phone}</td>
-                  <td className="p-4 font-bold text-slate-600">{employee.nationality}</td>
-                  <td className="p-4 font-bold text-slate-600">{jobTitleText(employee.jobTitle, lang)}</td>
-                  <td className="p-4 font-bold text-slate-600">{workLocationText(employee.workLocation, lang)}</td>
-                  <td className="relative p-4">
-                    <div
-                      data-status-menu
-                      className="relative inline-block"
-                    >
-                      <button
-                        type="button"
-                        disabled={updatingStatusId === employee.id}
-                        onClick={() => {
-                          setOpenMenuId(null);
-                          setOpenStatusId(
-                            openStatusId === employee.id
+                  <TableHead>{t.iqama}</TableHead>
+                  <TableHead>{t.phone}</TableHead>
+
+                  <TableHead className="hidden 2xl:table-cell">
+                    {t.nationality}
+                  </TableHead>
+
+                  <TableHead className="hidden lg:table-cell">
+                    {t.job}
+                  </TableHead>
+
+                  <TableHead>{t.location}</TableHead>
+                  <TableHead>{t.status}</TableHead>
+
+                  <TableHead className="hidden xl:table-cell">
+                    {t.performance}
+                  </TableHead>
+
+                  <TableHead className="w-[90px] text-center">
+                    {t.actions}
+                  </TableHead>
+                </tr>
+              </thead>
+
+              <tbody>
+                {filteredEmployees.map((employee) => (
+                  <tr
+                    key={employee.id}
+                    className={`border-b border-slate-100 transition last:border-b-0 hover:bg-blue-50/30 ${
+                      deletingId === employee.id
+                        ? "pointer-events-none opacity-50"
+                        : ""
+                    }`}
+                  >
+                    <td className="px-4 py-3">
+                      <EmployeeCell
+                        employee={employee}
+                        lang={lang}
+                      />
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <CreditCard className="h-4 w-4 text-slate-400" />
+
+                        <span
+                          dir="ltr"
+                          className="whitespace-nowrap text-sm font-semibold text-slate-700"
+                        >
+                          {employee.iqama || "-"}
+                        </span>
+                      </div>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Smartphone className="h-4 w-4 text-slate-400" />
+
+                        <span
+                          dir="ltr"
+                          className="whitespace-nowrap text-sm font-semibold text-slate-700"
+                        >
+                          {employee.phone || "-"}
+                        </span>
+                      </div>
+                    </td>
+
+                    <td className="hidden px-4 py-3 text-sm font-semibold text-slate-600 2xl:table-cell">
+                      {employee.nationality || "-"}
+                    </td>
+
+                    <td className="hidden px-4 py-3 lg:table-cell">
+                      <span className="text-sm font-bold text-slate-700">
+                        {jobTitleText(employee.job_title, lang)}
+                      </span>
+                    </td>
+
+                    <td className="px-4 py-3">
+                      <WorkLocationBadge
+                        value={employee.work_location}
+                        lang={lang}
+                      />
+                    </td>
+
+                    <td className="relative px-4 py-3">
+                      <StatusSelector
+                        employee={employee}
+                        lang={lang}
+                        open={openStatusMenu === employee.id}
+                        loading={updatingStatusId === employee.id}
+                        onToggle={(event) => {
+                          event.stopPropagation();
+                          setOpenMenu(null);
+                          setOpenStatusMenu((current) =>
+                            current === employee.id
                               ? null
                               : employee.id
                           );
                         }}
-                        className={`inline-flex min-w-[78px] items-center justify-center rounded-full px-3 py-1 text-xs font-bold transition hover:scale-105 disabled:cursor-wait disabled:opacity-60 ${statusClass(
-                          employee.status
-                        )}`}
+                        onSelect={(status) =>
+                          updateEmployeeStatus(employee, status)
+                        }
+                      />
+                    </td>
+
+                    <td className="hidden px-4 py-3 xl:table-cell">
+                      <PerformanceBadge
+                        performance={employee.performance}
+                        lang={lang}
+                      />
+                    </td>
+
+                    <td className="relative px-4 py-3 text-center">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setOpenStatusMenu(null);
+
+                          setOpenMenu((current) =>
+                            current === employee.id
+                              ? null
+                              : employee.id
+                          );
+                        }}
+                        className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-600"
                       >
-                        {updatingStatusId === employee.id
-                          ? text.updatingStatus
-                          : statusText(employee.status, lang)}
+                        <MoreVertical className="h-4 w-4" />
                       </button>
 
-                      {openStatusId === employee.id && (
+                      {openMenu === employee.id && (
                         <div
-                          className={`absolute top-9 z-[70] w-44 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1 shadow-xl ${
-                            isAr ? "right-0" : "left-0"
+                          onClick={(event) => event.stopPropagation()}
+                          className={`absolute top-[46px] z-50 w-44 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 text-start shadow-xl ${
+                            isAr ? "left-4" : "right-4"
                           }`}
                         >
-                          {statusOptions(lang).map((option) => {
-                            const selected =
-                              employee.status === option.value;
+                          <Link
+                            href={`/employees/${employee.id}`}
+                            className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                          >
+                            <Eye className="h-4 w-4 text-slate-500" />
+                            {t.view}
+                          </Link>
 
-                            return (
-                              <button
-                                key={option.value}
-                                type="button"
-                                onClick={() =>
-                                  changeEmployeeStatus(
-                                    employee,
-                                    option.value
-                                  )
-                                }
-                                className={`flex w-full items-center justify-between rounded-xl px-3 py-2.5 text-sm font-bold transition ${
-                                  selected
-                                    ? "bg-blue-50 text-blue-700"
-                                    : "text-slate-700 hover:bg-slate-50"
-                                }`}
-                              >
-                                <span>{option.label}</span>
-                                <span
-                                  className={`h-2.5 w-2.5 rounded-full ${statusDotClass(
-                                    option.value
-                                  )}`}
-                                />
-                              </button>
-                            );
-                          })}
+                          <Link
+                            href={`/employees/${employee.id}/edit`}
+                            className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
+                          >
+                            <Pencil className="h-4 w-4 text-blue-600" />
+                            {t.edit}
+                          </Link>
+
+                          <div className="my-1 border-t border-slate-100" />
+
+                          <button
+                            type="button"
+                            onClick={() => deleteEmployee(employee)}
+                            className="flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-start text-sm font-extrabold text-red-600 transition hover:bg-red-50"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                            {t.delete}
+                          </button>
                         </div>
                       )}
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${performanceClass(employee.performance)}`}>
-                      {performanceText(employee.performance, lang)}
-                    </span>
-                  </td>
-                  <td className="relative p-4" data-actions-menu>
-                    <button
-                      onClick={() => {
-                        setOpenStatusId(null);
-                        setOpenMenuId(openMenuId === employee.id ? null : employee.id);
-                      }}
-                      className="rounded-xl border border-slate-200 bg-white p-2 text-slate-700 hover:bg-slate-50"
-                    >
-                      <MoreVertical className="h-5 w-5" />
-                    </button>
-
-                    {openMenuId === employee.id && (
-                      <div className="absolute left-4 top-12 z-50 w-48 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
-                        <Link href={`/employees/${employee.id}`} className="flex items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-blue-50 hover:text-blue-700">
-                          <Eye className="h-4 w-4" />
-                          {text.viewDetails}
-                        </Link>
-
-                        <Link
-  href={`/employees/${employee.id}/edit`}
-  onClick={() => setOpenMenuId(null)}
-  className="flex w-full items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
->
-  <Edit className="h-4 w-4" />
-  {text.edit}
-</Link>
-
-                        <button onClick={() => toggleEmployeeStatus(employee)} className="flex w-full items-center gap-2 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-orange-50 hover:text-orange-700">
-                          {employee.status === "stopped" ? <UserCheck className="h-4 w-4" /> : <UserX className="h-4 w-4" />}
-                          {employee.status === "stopped" ? text.reactivate : text.stop}
-                        </button>
-
-                        <button onClick={() => deleteEmployee(employee)} className="flex w-full items-center gap-2 px-4 py-3 text-sm font-bold text-red-700 hover:bg-red-50">
-                          <Trash2 className="h-4 w-4" />
-                          {text.delete}
-                        </button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-                </tbody>
-                </table>
-              </div>
-            )}
-
-            <div
-              dir={isAr ? "rtl" : "ltr"}
-              className="flex items-center justify-center border-t border-slate-200 bg-slate-50 px-5 py-4"
-            >
-              <div className="rounded-2xl bg-blue-50 px-6 py-3 text-sm font-black text-blue-700">
-                {isAr
-                  ? "عدد الموظفين في النتائج الحالية"
-                  : "Employees in Current Results"}
-                :{" "}
-                <span className="text-xl">
-                  {filtered.length.toLocaleString("en-US")}
-                </span>
-              </div>
-            </div>
-          </>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-      </div>
-    </>
+
+        <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/60 px-4 py-3">
+          <p className="text-xs font-bold text-slate-500">
+            {isAr ? "المعروض:" : "Showing:"}{" "}
+            <span className="font-black text-slate-800">
+              {filteredEmployees.length}
+            </span>
+          </p>
+
+          <p className="text-xs font-bold text-slate-400">
+            {isAr
+              ? `من إجمالي ${employees.length} موظف`
+              : `of ${employees.length} employees`}
+          </p>
+        </div>
+      </section>
+    </div>
   );
 }
 
-function normalizeEmployeeStatus(value: string) {
-  const normalized = String(value || "").trim().toLowerCase();
-
-  if (["active", "نشط"].includes(normalized)) {
-    return "active";
-  }
-
-  if (["stopped", "متوقف", "موقوف"].includes(normalized)) {
-    return "stopped";
-  }
-
-  if (["vacation", "إجازة", "اجازة"].includes(normalized)) {
-    return "vacation";
-  }
-
-  if (
-    [
-      "outofservice",
-      "out_of_service",
-      "out of service",
-      "خارج الخدمة",
-    ].includes(normalized)
-  ) {
-    return "outOfService";
-  }
-
-  return normalized;
-}
-
-function normalizeWorkLocation(value: string) {
-  const normalized = String(value || "").trim().toLowerCase();
-
-  if (
-    [
-      "hungerstation",
-      "hunger station",
-      "hunger",
-      "هنجرستيشن",
-      "هنقرستيشن",
-    ].includes(normalized)
-  ) {
-    return "HungerStation";
-  }
-
-  if (["keeta", "كيتا"].includes(normalized)) {
-    return "Keeta";
-  }
-
-  if (["management", "الإدارة", "الادارة"].includes(normalized)) {
-    return "management";
-  }
-
-  if (["maintenance", "الصيانة"].includes(normalized)) {
-    return "maintenance";
-  }
-
-  return value;
-}
-
-function statusText(status: string, lang: Lang) {
-  const map: Record<string, { ar: string; en: string }> = {
-    active: { ar: "نشط", en: "Active" },
-    stopped: { ar: "متوقف", en: "Stopped" },
-    vacation: { ar: "إجازة", en: "Vacation" },
-    outOfService: { ar: "خارج الخدمة", en: "Out Of Service" },
-    "نشط": { ar: "نشط", en: "Active" },
-    "متوقف": { ar: "متوقف", en: "Stopped" },
-    "إجازة": { ar: "إجازة", en: "Vacation" },
-    "خارج الخدمة": { ar: "خارج الخدمة", en: "Out Of Service" },
-  };
-  return map[status]?.[lang] || status;
-}
-
-function performanceText(performance: string, lang: Lang) {
-  const map: Record<string, { ar: string; en: string }> = {
-    excellent: { ar: "ممتاز", en: "Excellent" },
-    good: { ar: "جيد", en: "Good" },
-    average: { ar: "متوسط", en: "Average" },
-    weak: { ar: "ضعيف", en: "Poor" },
-    "ممتاز": { ar: "ممتاز", en: "Excellent" },
-    "جيد": { ar: "جيد", en: "Good" },
-    "متوسط": { ar: "متوسط", en: "Average" },
-    "ضعيف": { ar: "ضعيف", en: "Poor" },
-  };
-  return map[performance]?.[lang] || performance;
-}
-
-function workLocationText(location: string, lang: Lang) {
-  const map: Record<string, { ar: string; en: string }> = {
-    Keeta: { ar: "Keeta", en: "Keeta" },
-    HungerStation: { ar: "HungerStation", en: "HungerStation" },
-    management: { ar: "الإدارة", en: "Management" },
-    maintenance: { ar: "الصيانة", en: "Maintenance" },
-    "الإدارة": { ar: "الإدارة", en: "Management" },
-    "الصيانة": { ar: "الصيانة", en: "Maintenance" },
-  };
-  return map[location]?.[lang] || location;
-}
-
-function jobTitleText(jobTitle: string, lang: Lang) {
-  const map: Record<string, { ar: string; en: string }> = {
-    keetaCourier: { ar: "مندوب كيتا", en: "Keeta Courier" },
-    hungerCourier: { ar: "مندوب هنجرستيشن", en: "HungerStation Courier" },
-    supervisor: { ar: "مشرف", en: "Supervisor" },
-    mechanic: { ar: "ميكانيكي", en: "Mechanic" },
-    maintenanceOfficer: { ar: "مسؤول الصيانة", en: "Maintenance Officer" },
-    "مندوب كيتا": { ar: "مندوب كيتا", en: "Keeta Courier" },
-    "مندوب هنقرستيشن": { ar: "مندوب هنجرستيشن", en: "HungerStation Courier" },
-    "مندوب هنجرستيشن": { ar: "مندوب هنجرستيشن", en: "HungerStation Courier" },
-    "مشرف": { ar: "مشرف", en: "Supervisor" },
-    "ميكانيكي": { ar: "ميكانيكي", en: "Mechanic" },
-    "مسؤول الصيانة": { ar: "مسؤول الصيانة", en: "Maintenance Officer" },
-  };
-  return map[jobTitle]?.[lang] || jobTitle;
-}
-
-function statusClass(status: string) {
-  if (status === "active" || status === "نشط") return "bg-green-50 text-green-700";
-  if (status === "stopped" || status === "متوقف") return "bg-red-50 text-red-700";
-  if (status === "vacation" || status === "إجازة") return "bg-orange-50 text-orange-700";
-  return "bg-slate-100 text-slate-700";
-}
-
-function statusDotClass(status: string) {
-  if (status === "active") return "bg-green-500";
-  if (status === "stopped") return "bg-red-500";
-  if (status === "vacation") return "bg-orange-500";
-  if (status === "outOfService") return "bg-slate-500";
-
-  return "bg-slate-300";
-}
-
-function performanceClass(performance: string) {
-  if (performance === "excellent" || performance === "ممتاز") return "bg-green-50 text-green-700";
-  if (performance === "good" || performance === "جيد") return "bg-blue-50 text-blue-700";
-  if (performance === "average" || performance === "متوسط") return "bg-orange-50 text-orange-700";
-  return "bg-red-50 text-red-700";
-}
-
-function jobOptions(lang: Lang) {
-  return [
-    { value: "keetaCourier", label: jobTitleText("keetaCourier", lang) },
-    { value: "hungerCourier", label: jobTitleText("hungerCourier", lang) },
-    { value: "supervisor", label: jobTitleText("supervisor", lang) },
-    { value: "mechanic", label: jobTitleText("mechanic", lang) },
-    { value: "maintenanceOfficer", label: jobTitleText("maintenanceOfficer", lang) },
-  ];
-}
-
-function locationOptions(lang: Lang) {
-  return [
-    { value: "Keeta", label: "Keeta" },
-    { value: "HungerStation", label: "HungerStation" },
-    { value: "management", label: workLocationText("management", lang) },
-    { value: "maintenance", label: workLocationText("maintenance", lang) },
-  ];
-}
-
-function statusOptions(lang: Lang) {
-  return [
-    { value: "active", label: statusText("active", lang) },
-    { value: "stopped", label: statusText("stopped", lang) },
-    { value: "vacation", label: statusText("vacation", lang) },
-    { value: "outOfService", label: statusText("outOfService", lang) },
-  ];
-}
-
-function performanceOptions(lang: Lang) {
-  return [
-    { value: "excellent", label: performanceText("excellent", lang) },
-    { value: "good", label: performanceText("good", lang) },
-    { value: "average", label: performanceText("average", lang) },
-    { value: "weak", label: performanceText("weak", lang) },
-  ];
-}
-
-function Input({
-  label,
+function CircleStatCard({
+  title,
   value,
-  onChange,
+  tone,
+  icon,
+  active,
+  onClick,
 }: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
+  title: string;
+  value: number;
+  tone:
+    | "blue"
+    | "green"
+    | "red"
+    | "dark"
+    | "slate"
+    | "hungerGreen"
+    | "purple";
+  icon: React.ReactNode;
+  active: boolean;
+  onClick: () => void;
 }) {
-  return (
-    <label className="space-y-2">
-      <span className="text-sm font-extrabold text-slate-600">{label}</span>
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
-      />
-    </label>
-  );
-}
+  const tones = {
+    blue: {
+      ring: "border-blue-200 bg-blue-50",
+      number: "text-blue-700",
+      icon: "bg-blue-100 text-blue-700",
+      active: "ring-blue-200",
+    },
+    green: {
+      ring: "border-emerald-200 bg-emerald-50",
+      number: "text-emerald-700",
+      icon: "bg-emerald-100 text-emerald-700",
+      active: "ring-emerald-200",
+    },
+    red: {
+      ring: "border-red-200 bg-red-50",
+      number: "text-red-700",
+      icon: "bg-red-100 text-red-700",
+      active: "ring-red-200",
+    },
+    dark: {
+      ring: "border-zinc-300 bg-zinc-100",
+      number: "text-zinc-800",
+      icon: "bg-zinc-200 text-zinc-800",
+      active: "ring-zinc-300",
+    },
+    slate: {
+      ring: "border-slate-300 bg-slate-50",
+      number: "text-slate-700",
+      icon: "bg-slate-200 text-slate-700",
+      active: "ring-slate-300",
+    },
+    hungerGreen: {
+      ring: "border-green-300 bg-green-50",
+      number: "text-green-700",
+      icon: "bg-green-100 text-green-700",
+      active: "ring-green-200",
+    },
+    purple: {
+      ring: "border-violet-200 bg-violet-50",
+      number: "text-violet-700",
+      icon: "bg-violet-100 text-violet-700",
+      active: "ring-violet-200",
+    },
+  };
 
-function SelectInput({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}) {
+  const current = tones[tone];
+
   return (
-    <label className="space-y-2">
-      <span className="text-sm font-extrabold text-slate-600">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold outline-none focus:border-blue-500"
+    <button
+      type="button"
+      onClick={onClick}
+      className={`group flex min-w-0 cursor-pointer flex-col items-center justify-center rounded-2xl px-2 py-1 text-center outline-none transition ${
+        active ? "bg-slate-50/80" : "hover:bg-slate-50/60"
+      }`}
+    >
+      <div
+        className={`relative flex h-[108px] w-[108px] items-center justify-center rounded-full border-[3px] shadow-[0_5px_14px_rgba(15,23,42,0.05)] transition duration-200 group-hover:-translate-y-1 group-hover:shadow-md ${
+          current.ring
+        } ${active ? `ring-4 ${current.active}` : ""}`}
       >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function StatCard({ title, value, icon, color }: any) {
-  const colors: any = {
-    blue: "bg-blue-50 text-blue-700",
-    green: "bg-green-50 text-green-700",
-    red: "bg-red-50 text-red-600",
-  };
-
-  return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-      <div className="flex items-center justify-between">
-        <div className={`flex h-14 w-14 items-center justify-center rounded-2xl ${colors[color]}`}>
+        <div
+          className={`absolute top-2.5 flex h-7 w-7 items-center justify-center rounded-full ${current.icon}`}
+        >
           {icon}
         </div>
-        <div className="text-right">
-          <p className="text-sm font-bold text-slate-500">{title}</p>
-          <h3 className="mt-2 text-4xl font-extrabold text-[#0f2544]">{value}</h3>
+
+        <span
+          className={`mt-5 text-[30px] font-black leading-none ${current.number}`}
+        >
+          {value}
+        </span>
+      </div>
+
+      <p className={`mt-2.5 min-h-[36px] max-w-[145px] text-center text-xs font-extrabold leading-5 ${
+        active ? "text-blue-700" : "text-[#102a4c]"
+      }`}>
+        {title}
+      </p>
+    </button>
+  );
+}
+
+function FilterSelect({
+  value,
+  onChange,
+  children,
+  isAr,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  children: React.ReactNode;
+  isAr: boolean;
+}) {
+  return (
+    <div className="relative min-w-[185px]">
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className={`h-11 w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 text-sm font-bold text-slate-700 outline-none transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-50 ${
+          isAr ? "pr-4 pl-9" : "pl-4 pr-9"
+        }`}
+      >
+        {children}
+      </select>
+
+      <ChevronDown
+        className={`pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 ${
+          isAr ? "left-3" : "right-3"
+        }`}
+      />
+    </div>
+  );
+}
+
+function TableHead({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <th
+      className={`whitespace-nowrap px-4 py-3 text-start text-xs font-black text-slate-500 ${className}`}
+    >
+      {children}
+    </th>
+  );
+}
+
+function EmployeeCell({
+  employee,
+  lang,
+}: {
+  employee: Employee;
+  lang: Lang;
+}) {
+  const hungerId =
+    employee.hunger_id ||
+    (employee.work_location === "HungerStation"
+      ? employee.platform_id
+      : null);
+
+  const keetaId =
+    employee.keeta_id ||
+    (employee.work_location === "Keeta"
+      ? employee.platform_id
+      : null);
+
+  return (
+    <div className="flex min-w-[330px] items-center gap-3">
+      {employee.photo_url ? (
+        <img
+          src={employee.photo_url}
+          alt={employee.name}
+          className="h-11 w-11 shrink-0 rounded-xl object-cover ring-1 ring-slate-200"
+        />
+      ) : (
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-sm font-black text-blue-700 ring-1 ring-blue-100">
+          {getInitials(employee.name)}
+        </div>
+      )}
+
+      <div className="min-w-0 flex-1">
+        <Link
+          href={`/employees/${employee.id}`}
+          className="block w-full whitespace-normal break-words text-sm font-black leading-5 text-[#102a4c] transition hover:text-blue-600"
+        >
+          {employee.name || "-"}
+        </Link>
+
+        <div
+          dir="ltr"
+          className="mt-1.5 flex min-h-[20px] flex-wrap items-center gap-1.5"
+        >
+          {hungerId && (
+            <PlatformIdBadge
+              label="HS"
+              value={hungerId}
+              tone="green"
+            />
+          )}
+
+          {keetaId && (
+            <PlatformIdBadge
+              label="KEETA"
+              value={keetaId}
+              tone="purple"
+            />
+          )}
+
+          {!hungerId && !keetaId && (
+            <span className="text-[10px] font-semibold text-slate-400">
+              {lang === "ar"
+                ? "بدون معرف منصة"
+                : "No platform ID"}
+            </span>
+          )}
         </div>
       </div>
     </div>
   );
+}
+
+function PlatformIdBadge({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: "green" | "purple";
+}) {
+  const styles =
+    tone === "green"
+      ? "border-green-100 bg-green-50 text-green-700"
+      : "border-violet-100 bg-violet-50 text-violet-700";
+
+  return (
+    <span
+      className={`inline-flex h-5 items-center gap-1 rounded-md border px-2 text-[9px] font-black leading-none ${styles}`}
+    >
+      <span className="opacity-70">{label}</span>
+      <span className="font-black">{value}</span>
+    </span>
+  );
+}
+
+function WorkLocationBadge({
+  value,
+  lang,
+}: {
+  value: string | null;
+  lang: Lang;
+}) {
+  if (!value) {
+    return <span className="text-slate-400">-</span>;
+  }
+
+  if (value === "KeetaAndHungerStation") {
+    return (
+      <div className="flex flex-wrap gap-1">
+        <span className="rounded-lg border border-violet-100 bg-violet-50 px-2.5 py-1 text-[11px] font-black text-violet-700">
+          Keeta
+        </span>
+
+        <span className="rounded-lg border border-green-100 bg-green-50 px-2.5 py-1 text-[11px] font-black text-green-700">
+          HungerStation
+        </span>
+      </div>
+    );
+  }
+
+  const style =
+    value === "Keeta"
+      ? "border-violet-100 bg-violet-50 text-violet-700"
+      : value === "HungerStation"
+      ? "border-green-100 bg-green-50 text-green-700"
+      : value === "maintenance" || value === "الصيانة"
+      ? "border-cyan-100 bg-cyan-50 text-cyan-700"
+      : "border-blue-100 bg-blue-50 text-blue-700";
+
+  return (
+    <span
+      className={`inline-flex rounded-lg border px-2.5 py-1 text-[11px] font-black ${style}`}
+    >
+      {workLocationText(value, lang)}
+    </span>
+  );
+}
+
+function StatusSelector({
+  employee,
+  lang,
+  open,
+  loading,
+  onToggle,
+  onSelect,
+}: {
+  employee: Employee;
+  lang: Lang;
+  open: boolean;
+  loading: boolean;
+  onToggle: (event: React.MouseEvent<HTMLButtonElement>) => void;
+  onSelect: (status: EmployeeStatus) => void;
+}) {
+  const current = normalizeStatus(employee.status);
+
+  const options: {
+    value: EmployeeStatus;
+    ar: string;
+    en: string;
+    dot: string;
+    hover: string;
+  }[] = [
+    {
+      value: "active",
+      ar: "نشط",
+      en: "Active",
+      dot: "bg-emerald-500",
+      hover: "hover:bg-emerald-50",
+    },
+    {
+      value: "stopped",
+      ar: "غير نشط",
+      en: "Inactive",
+      dot: "bg-red-500",
+      hover: "hover:bg-red-50",
+    },
+    {
+      value: "vacation",
+      ar: "إجازة",
+      en: "Vacation",
+      dot: "bg-amber-500",
+      hover: "hover:bg-amber-50",
+    },
+    {
+      value: "outOfService",
+      ar: "خارج الخدمة",
+      en: "Out Of Service",
+      dot: "bg-slate-500",
+      hover: "hover:bg-slate-50",
+    },
+  ];
+
+  const styles: Record<string, string> = {
+    active:
+      "border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100",
+    stopped:
+      "border-red-200 bg-red-50 text-red-700 hover:bg-red-100",
+    vacation:
+      "border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100",
+    outOfService:
+      "border-slate-300 bg-slate-100 text-slate-700 hover:bg-slate-200",
+  };
+
+  const dots: Record<string, string> = {
+    active: "bg-emerald-500",
+    stopped: "bg-red-500",
+    vacation: "bg-amber-500",
+    outOfService: "bg-slate-500",
+  };
+
+  return (
+    <div
+      className="relative inline-block"
+      onClick={(event) => event.stopPropagation()}
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={loading}
+        className={`inline-flex min-w-[112px] items-center justify-center gap-2 rounded-xl border px-3.5 py-2 text-xs font-black shadow-sm transition ${
+          styles[current] ||
+          "border-slate-200 bg-slate-50 text-slate-700"
+        } ${loading ? "cursor-wait opacity-60" : ""}`}
+      >
+        {loading ? (
+          <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+        ) : (
+          <span
+            className={`h-2 w-2 rounded-full ${
+              dots[current] || "bg-slate-400"
+            }`}
+          />
+        )}
+
+        <span>{statusText(employee.status, lang)}</span>
+
+        <ChevronDown
+          className={`h-3.5 w-3.5 transition ${
+            open ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {open && (
+        <div
+          className={`absolute top-[46px] z-[70] w-44 overflow-hidden rounded-xl border border-slate-200 bg-white p-1.5 shadow-[0_12px_30px_rgba(15,23,42,0.16)] ${
+            lang === "ar" ? "right-0" : "left-0"
+          }`}
+        >
+          {options.map((option) => {
+            const selected = current === option.value;
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => onSelect(option.value)}
+                className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-start text-xs font-extrabold text-slate-700 transition ${option.hover}`}
+              >
+                <span className="flex items-center gap-2">
+                  <span className={`h-2 w-2 rounded-full ${option.dot}`} />
+                  {lang === "ar" ? option.ar : option.en}
+                </span>
+
+                {selected && (
+                  <Check className="h-4 w-4 text-blue-600" />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PerformanceBadge({
+  performance,
+  lang,
+}: {
+  performance: string | null;
+  lang: Lang;
+}) {
+  const normalized = normalizePerformance(performance);
+
+  const styles: Record<string, string> = {
+    excellent: "bg-emerald-50 text-emerald-700",
+    good: "bg-blue-50 text-blue-700",
+    average: "bg-amber-50 text-amber-700",
+    weak: "bg-red-50 text-red-700",
+  };
+
+  return (
+    <span
+      className={`inline-flex rounded-lg px-3 py-1.5 text-[11px] font-black ${
+        styles[normalized] ||
+        "bg-slate-100 text-slate-600"
+      }`}
+    >
+      {performanceText(performance, lang)}
+    </span>
+  );
+}
+
+function getInitials(name: string | null | undefined) {
+  if (!name) return "?";
+
+  const parts = name
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+
+  return `${parts[0][0] || ""}${
+    parts[1][0] || ""
+  }`.toUpperCase();
+}
+
+function normalizeStatus(value: string | null) {
+  if (!value) return "";
+
+  const map: Record<string, string> = {
+    active: "active",
+    نشط: "active",
+
+    stopped: "stopped",
+    متوقف: "stopped",
+    "غير نشط": "stopped",
+
+    vacation: "vacation",
+    إجازة: "vacation",
+
+    outOfService: "outOfService",
+    "خارج الخدمة": "outOfService",
+  };
+
+  return map[value] || value;
+}
+
+function normalizePerformance(value: string | null) {
+  if (!value) return "";
+
+  const map: Record<string, string> = {
+    excellent: "excellent",
+    ممتاز: "excellent",
+
+    good: "good",
+    جيد: "good",
+
+    average: "average",
+    متوسط: "average",
+
+    weak: "weak",
+    ضعيف: "weak",
+  };
+
+  return map[value] || value;
+}
+
+function statusText(
+  value: string | null,
+  lang: Lang
+) {
+  if (!value) return "-";
+
+  const normalized = normalizeStatus(value);
+
+  const map: Record<
+    string,
+    { ar: string; en: string }
+  > = {
+    active: {
+      ar: "نشط",
+      en: "Active",
+    },
+
+    stopped: {
+      ar: "غير نشط",
+      en: "Inactive",
+    },
+
+    vacation: {
+      ar: "إجازة",
+      en: "Vacation",
+    },
+
+    outOfService: {
+      ar: "خارج الخدمة",
+      en: "Out Of Service",
+    },
+  };
+
+  return map[normalized]?.[lang] || value;
+}
+
+function performanceText(
+  value: string | null,
+  lang: Lang
+) {
+  if (!value) return "-";
+
+  const normalized = normalizePerformance(value);
+
+  const map: Record<
+    string,
+    { ar: string; en: string }
+  > = {
+    excellent: {
+      ar: "ممتاز",
+      en: "Excellent",
+    },
+
+    good: {
+      ar: "جيد",
+      en: "Good",
+    },
+
+    average: {
+      ar: "متوسط",
+      en: "Average",
+    },
+
+    weak: {
+      ar: "ضعيف",
+      en: "Poor",
+    },
+  };
+
+  return map[normalized]?.[lang] || value;
+}
+
+function jobTitleText(
+  value: string | null,
+  lang: Lang
+) {
+  if (!value) return "-";
+
+  const map: Record<
+    string,
+    { ar: string; en: string }
+  > = {
+    deliveryCourier: {
+      ar: "مندوب توصيل",
+      en: "Delivery Courier",
+    },
+
+    keetaCourier: {
+      ar: "مندوب توصيل",
+      en: "Delivery Courier",
+    },
+
+    hungerCourier: {
+      ar: "مندوب توصيل",
+      en: "Delivery Courier",
+    },
+
+    supervisor: {
+      ar: "مشرف",
+      en: "Supervisor",
+    },
+
+    mechanic: {
+      ar: "ميكانيكي",
+      en: "Mechanic",
+    },
+
+    maintenanceOfficer: {
+      ar: "مسؤول الصيانة",
+      en: "Maintenance Officer",
+    },
+
+    "مندوب توصيل": {
+      ar: "مندوب توصيل",
+      en: "Delivery Courier",
+    },
+
+    "مندوب كيتا": {
+      ar: "مندوب توصيل",
+      en: "Delivery Courier",
+    },
+
+    "مندوب هنقرستيشن": {
+      ar: "مندوب توصيل",
+      en: "Delivery Courier",
+    },
+
+    "مندوب هنجرستيشن": {
+      ar: "مندوب توصيل",
+      en: "Delivery Courier",
+    },
+
+    مشرف: {
+      ar: "مشرف",
+      en: "Supervisor",
+    },
+
+    ميكانيكي: {
+      ar: "ميكانيكي",
+      en: "Mechanic",
+    },
+
+    "مسؤول الصيانة": {
+      ar: "مسؤول الصيانة",
+      en: "Maintenance Officer",
+    },
+  };
+
+  return map[value]?.[lang] || value;
+}
+
+function workLocationText(
+  value: string | null,
+  lang: Lang
+) {
+  if (!value) return "-";
+
+  const map: Record<
+    string,
+    { ar: string; en: string }
+  > = {
+    Keeta: {
+      ar: "كيتا",
+      en: "Keeta",
+    },
+
+    HungerStation: {
+      ar: "هنجرستيشن",
+      en: "HungerStation",
+    },
+
+    KeetaAndHungerStation: {
+      ar: "كيتا وهنجرستيشن",
+      en: "Keeta & HungerStation",
+    },
+
+    management: {
+      ar: "الإدارة",
+      en: "Management",
+    },
+
+    maintenance: {
+      ar: "الصيانة",
+      en: "Maintenance",
+    },
+
+    الإدارة: {
+      ar: "الإدارة",
+      en: "Management",
+    },
+
+    الصيانة: {
+      ar: "الصيانة",
+      en: "Maintenance",
+    },
+  };
+
+  return map[value]?.[lang] || value;
 }
