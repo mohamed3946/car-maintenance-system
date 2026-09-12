@@ -1,0 +1,19 @@
+If your project does NOT already have vercel.json, you can use:
+
+{
+  "crons": [
+    {
+      "path": "/api/restaurant-demand/collect-google",
+      "schedule": "*/10 * * * *"
+    }
+  ]
+}
+
+IMPORTANT:
+Set RESTAURANT_RADAR_CRON_SECRET in Vercel.
+Vercel Cron sends the configured CRON_SECRET as:
+Authorization: Bearer <CRON_SECRET>
+
+If your project already has vercel.json, merge only the "crons" entry instead of replacing the whole file.
+
+If your Vercel plan limits cron frequency, use the closest frequency supported by your plan.
