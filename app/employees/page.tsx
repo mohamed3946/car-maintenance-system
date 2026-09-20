@@ -53,6 +53,7 @@ type EmployeeRow = {
   work_location: string | null;
   status: string | null;
   performance: string | null;
+  employment_stage: string | null;
 
   platform_id: string | null;
   hunger_id: string | null;
@@ -73,6 +74,35 @@ type HungerDailyPerformanceRow = {
   work_date: string | null;
   completed_deliveries: number | null;
   report_month: string | null;
+};
+
+type LiveLocationRow = {
+  employee_id: string;
+  shift_id: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  accuracy_m: number | null;
+  speed_kmh: number | null;
+  heading: number | null;
+  is_online: boolean | null;
+  recorded_at: string | null;
+  updated_at: string | null;
+  employees?: {
+    name?: string | null;
+    iqama?: string | null;
+    hunger_id?: string | null;
+    keeta_id?: string | null;
+    work_location?: string | null;
+  } | null;
+};
+
+type DailyTrackingRow = {
+  employee_id: string;
+  total_distance_m: number | null;
+  moving_seconds: number | null;
+  stopped_seconds: number | null;
+  first_location_at: string | null;
+  last_location_at: string | null;
 };
 
 type RankedRider = {
@@ -144,6 +174,22 @@ function EmployeesDashboardContent() {
       HungerDailyPerformanceRow[]
     >([]);
 
+  const [
+    liveLocations,
+    setLiveLocations,
+  ] =
+    useState<
+      LiveLocationRow[]
+    >([]);
+
+  const [
+    trackingRows,
+    setTrackingRows,
+  ] =
+    useState<
+      DailyTrackingRow[]
+    >([]);
+
   const [loading, setLoading] =
     useState(true);
 
@@ -193,6 +239,58 @@ function EmployeesDashboardContent() {
     cash: isAr
       ? "إدارة الكاش"
       : "Cash Management",
+
+    liveTrackingNow: isAr
+      ? "التتبع المباشر الآن"
+      : "Live Tracking Now",
+
+    activeNow: isAr
+      ? "نشط الآن"
+      : "Active Now",
+
+    inactiveNow: isAr
+      ? "غير نشط"
+      : "Inactive",
+
+    onlineNow: isAr
+      ? "GPS متصل"
+      : "GPS Online",
+
+    offlineTracked: isAr
+      ? "GPS غير متصل"
+      : "GPS Offline",
+
+    trackedToday: isAr
+      ? "تم تتبعهم اليوم"
+      : "Tracked Today",
+
+    totalDistanceToday: isAr
+      ? "إجمالي المسافة اليوم"
+      : "Total Distance Today",
+
+    averageDistanceToday: isAr
+      ? "متوسط المسافة"
+      : "Average Distance",
+
+    totalMovingTime: isAr
+      ? "إجمالي وقت الحركة"
+      : "Total Moving Time",
+
+    totalStoppedTime: isAr
+      ? "إجمالي وقت التوقف"
+      : "Total Stopped Time",
+
+    lastLocation: isAr
+      ? "آخر تحديث"
+      : "Last Update",
+
+    speed: isAr
+      ? "السرعة"
+      : "Speed",
+
+    viewMap: isAr
+      ? "عرض الخريطة كاملة"
+      : "View Full Map",
 
     totalEmployees: isAr
       ? "إجمالي الموظفين"
@@ -343,6 +441,7 @@ function EmployeesDashboardContent() {
       loadEmployees(),
       loadPerformanceOrders(),
       loadDailyPerformance(),
+      loadLiveTracking(),
     ]);
 
     setLoading(false);
@@ -355,6 +454,7 @@ function EmployeesDashboardContent() {
       loadEmployees(),
       loadPerformanceOrders(),
       loadDailyPerformance(),
+      loadLiveTracking(),
     ]);
 
     setRefreshing(false);
@@ -379,11 +479,16 @@ function EmployeesDashboardContent() {
           work_location,
           status,
           performance,
+          employment_stage,
           platform_id,
           hunger_id,
           keeta_id,
           created_at
         `)
+        .eq(
+          "employment_stage",
+          "employee"
+        )
         .order("created_at", {
           ascending: false,
         });
@@ -531,6 +636,156 @@ function EmployeesDashboardContent() {
       )
     );
   }
+
+  /* =========================================================
+     LIVE TRACKING
+  ========================================================= */
+
+  async function loadLiveTracking() {
+    const today =
+      getSaudiDateKey();
+
+    const [
+      {
+        data:
+          liveData,
+        error:
+          liveError,
+      },
+      {
+        data:
+          dailyTrackingData,
+        error:
+          dailyTrackingError,
+      },
+    ] =
+      await Promise.all([
+        supabase
+          .from(
+            "rider_live_locations"
+          )
+          .select(`
+            employee_id,
+            shift_id,
+            latitude,
+            longitude,
+            accuracy_m,
+            speed_kmh,
+            heading,
+            is_online,
+            recorded_at,
+            updated_at,
+            employees (
+              name,
+              iqama,
+              hunger_id,
+              keeta_id,
+              work_location
+            )
+          `)
+          .order(
+            "updated_at",
+            {
+              ascending:
+                false,
+            }
+          ),
+
+        supabase
+          .from(
+            "rider_daily_tracking"
+          )
+          .select(`
+            employee_id,
+            total_distance_m,
+            moving_seconds,
+            stopped_seconds,
+            first_location_at,
+            last_location_at
+          `)
+          .eq(
+            "tracking_date",
+            today
+          ),
+      ]);
+
+    if (liveError) {
+      console.error(
+        "LIVE LOCATIONS ERROR:",
+        liveError
+      );
+    } else {
+      setLiveLocations(
+        (liveData ||
+          []) as LiveLocationRow[]
+      );
+    }
+
+    if (
+      dailyTrackingError
+    ) {
+      console.error(
+        "DAILY TRACKING ERROR:",
+        dailyTrackingError
+      );
+    } else {
+      setTrackingRows(
+        (dailyTrackingData ||
+          []) as DailyTrackingRow[]
+      );
+    }
+  }
+
+  useEffect(() => {
+    const channel =
+      supabase
+        .channel(
+          "employees-dashboard-live-tracking"
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table:
+              "rider_live_locations",
+          },
+          () => {
+            loadLiveTracking();
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table:
+              "rider_daily_tracking",
+          },
+          () => {
+            loadLiveTracking();
+          }
+        )
+        .subscribe();
+
+    const timer =
+      window.setInterval(
+        () => {
+          loadLiveTracking();
+        },
+        30000
+      );
+
+    return () => {
+      window.clearInterval(
+        timer
+      );
+
+      supabase.removeChannel(
+        channel
+      );
+    };
+  }, []);
 
   /* =========================================================
      NORMALIZED EMPLOYEES
@@ -1339,6 +1594,223 @@ function EmployeesDashboardContent() {
     ]);
 
   /* =========================================================
+     LIVE TRACKING SUMMARY
+  ========================================================= */
+
+  const liveTrackingSummary =
+    useMemo(() => {
+      const now =
+        Date.now();
+
+      const recentWindowMs =
+        3 *
+        60 *
+        1000;
+
+      const trackedEmployeeIds =
+        new Set(
+          trackingRows.map(
+            (row) =>
+              row.employee_id
+          )
+        );
+
+      const onlineRows =
+        liveLocations.filter(
+          (row) => {
+            if (
+              !row.is_online ||
+              !row.updated_at
+            ) {
+              return false;
+            }
+
+            const updatedAt =
+              new Date(
+                row.updated_at
+              ).getTime();
+
+            return (
+              Number.isFinite(
+                updatedAt
+              ) &&
+              now -
+                updatedAt <=
+                recentWindowMs
+            );
+          }
+        );
+
+      const onlineIds =
+        new Set(
+          onlineRows.map(
+            (row) =>
+              row.employee_id
+          )
+        );
+
+      const activeRows =
+        onlineRows.filter(
+          (row) =>
+            Boolean(
+              row.shift_id
+            )
+        );
+
+      const inactiveRows =
+        onlineRows.filter(
+          (row) =>
+            !row.shift_id
+        );
+
+      const offlineTracked =
+        Array.from(
+          trackedEmployeeIds
+        ).filter(
+          (employeeId) =>
+            !onlineIds.has(
+              employeeId
+            )
+        ).length;
+
+      const totalDistanceKm =
+        trackingRows.reduce(
+          (
+            total,
+            row
+          ) =>
+            total +
+            Number(
+              row.total_distance_m ||
+                0
+            ) /
+              1000,
+          0
+        );
+
+      const totalMovingSeconds =
+        trackingRows.reduce(
+          (
+            total,
+            row
+          ) =>
+            total +
+            Number(
+              row.moving_seconds ||
+                0
+            ),
+          0
+        );
+
+      const totalStoppedSeconds =
+        trackingRows.reduce(
+          (
+            total,
+            row
+          ) =>
+            total +
+            Number(
+              row.stopped_seconds ||
+                0
+            ),
+          0
+        );
+
+      const averageDistanceKm =
+        trackedEmployeeIds.size >
+        0
+          ? totalDistanceKm /
+            trackedEmployeeIds.size
+          : 0;
+
+      const previewRows =
+        [...onlineRows]
+          .sort(
+            (
+              a,
+              b
+            ) => {
+              const aActive =
+                a.shift_id
+                  ? 1
+                  : 0;
+
+              const bActive =
+                b.shift_id
+                  ? 1
+                  : 0;
+
+              if (
+                aActive !==
+                bActive
+              ) {
+                return (
+                  bActive -
+                  aActive
+                );
+              }
+
+              return (
+                new Date(
+                  b.updated_at ||
+                    0
+                ).getTime() -
+                new Date(
+                  a.updated_at ||
+                    0
+                ).getTime()
+              );
+            }
+          )
+          .slice(
+            0,
+            8
+          );
+
+      return {
+        active:
+          activeRows.length,
+
+        inactive:
+          inactiveRows.length,
+
+        online:
+          onlineIds.size,
+
+        offline:
+          offlineTracked,
+
+        trackedToday:
+          trackedEmployeeIds.size,
+
+        totalDistanceKm,
+
+        averageDistanceKm,
+
+        totalMovingSeconds,
+
+        totalStoppedSeconds,
+
+        previewRows,
+      };
+    }, [
+      liveLocations,
+      trackingRows,
+    ]);
+
+  const trackingByEmployeeId =
+    useMemo(() => {
+      return new Map(
+        trackingRows.map(
+          (row) => [
+            row.employee_id,
+            row,
+          ]
+        )
+      );
+    }, [trackingRows]);
+
+  /* =========================================================
      LATEST EMPLOYEES
   ========================================================= */
 
@@ -1623,6 +2095,249 @@ function EmployeesDashboardContent() {
           }
           tone="slate"
         />
+      </section>
+
+      {/* =====================================================
+          LIVE TRACKING
+      ===================================================== */}
+
+      <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-50 text-blue-600">
+              <Radio className="h-5 w-5" />
+            </div>
+
+            <div>
+              <h2 className="text-lg font-black text-[#102a4c]">
+                {text.liveTrackingNow}
+              </h2>
+
+              <p className="mt-1 text-xs font-semibold text-slate-400">
+                {isAr
+                  ? `إحصائيات عامة للتتبع اليوم • ${liveTrackingSummary.trackedToday} مندوب تم تتبعهم`
+                  : `General tracking statistics today • ${liveTrackingSummary.trackedToday} riders tracked`}
+              </p>
+            </div>
+          </div>
+
+          <Link
+            href="/employees/live-tracking"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-[#102f55] px-4 text-xs font-black text-white transition hover:bg-[#0b2543]"
+          >
+            {text.viewMap}
+            <ArrowIcon className="h-4 w-4" />
+          </Link>
+        </div>
+
+        <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-8">
+          <TrackingMetric
+            label={text.activeNow}
+            value={liveTrackingSummary.active}
+            tone="green"
+          />
+
+          <TrackingMetric
+            label={text.inactiveNow}
+            value={liveTrackingSummary.inactive}
+            tone="amber"
+          />
+
+          <TrackingMetric
+            label={text.onlineNow}
+            value={liveTrackingSummary.online}
+            tone="blue"
+          />
+
+          <TrackingMetric
+            label={text.offlineTracked}
+            value={liveTrackingSummary.offline}
+            tone="slate"
+          />
+
+          <TrackingMetric
+            label={text.totalDistanceToday}
+            value={`${liveTrackingSummary.totalDistanceKm.toFixed(1)} KM`}
+            tone="blue"
+          />
+
+          <TrackingMetric
+            label={text.averageDistanceToday}
+            value={`${liveTrackingSummary.averageDistanceKm.toFixed(1)} KM`}
+            tone="cyan"
+          />
+
+          <TrackingMetric
+            label={text.totalMovingTime}
+            value={formatTrackingDuration(liveTrackingSummary.totalMovingSeconds)}
+            tone="green"
+          />
+
+          <TrackingMetric
+            label={text.totalStoppedTime}
+            value={formatTrackingDuration(liveTrackingSummary.totalStoppedSeconds)}
+            tone="amber"
+          />
+        </div>
+
+        <div className="mt-5 overflow-x-auto rounded-2xl border border-slate-100">
+          <table className="w-full min-w-[900px] text-sm">
+            <thead className="bg-slate-50 text-slate-500">
+              <tr>
+                <th className="p-3 text-start text-xs font-black">
+                  {isAr ? "المندوب" : "Rider"}
+                </th>
+
+                <th className="p-3 text-start text-xs font-black">
+                  {isAr ? "التشغيل" : "Operation"}
+                </th>
+
+                <th className="p-3 text-start text-xs font-black">
+                  {isAr ? "GPS" : "GPS"}
+                </th>
+
+                <th className="p-3 text-start text-xs font-black">
+                  {text.speed}
+                </th>
+
+                <th className="p-3 text-start text-xs font-black">
+                  {isAr ? "المسافة اليوم" : "Distance Today"}
+                </th>
+
+                <th className="p-3 text-start text-xs font-black">
+                  {isAr ? "الحركة" : "Moving"}
+                </th>
+
+                <th className="p-3 text-start text-xs font-black">
+                  {isAr ? "التوقف" : "Stopped"}
+                </th>
+
+                <th className="p-3 text-start text-xs font-black">
+                  {text.lastLocation}
+                </th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {liveTrackingSummary.previewRows.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="p-8 text-center text-sm font-bold text-slate-400"
+                  >
+                    {isAr
+                      ? "لم تصل بيانات GPS من تطبيق المناديب بعد."
+                      : "No GPS data has been received from the rider app yet."}
+                  </td>
+                </tr>
+              ) : (
+                liveTrackingSummary.previewRows.map((row) => {
+                  const daily =
+                    trackingByEmployeeId.get(
+                      row.employee_id
+                    );
+
+                  const active =
+                    Boolean(
+                      row.shift_id
+                    );
+
+                  return (
+                    <tr
+                      key={row.employee_id}
+                      className="border-t border-slate-100 transition hover:bg-slate-50/60"
+                    >
+                      <td className="p-3">
+                        <p className="font-black text-[#102a4c]">
+                          {row.employees?.name ||
+                            row.employee_id}
+                        </p>
+
+                        <p
+                          dir="ltr"
+                          className="mt-0.5 text-[10px] font-bold text-slate-400"
+                        >
+                          {row.employees?.iqama ||
+                            "-"}
+                        </p>
+                      </td>
+
+                      <td className="p-3">
+                        <span
+                          className={`inline-flex rounded-full px-3 py-1 text-[10px] font-black ${
+                            active
+                              ? "bg-emerald-50 text-emerald-700"
+                              : "bg-amber-50 text-amber-700"
+                          }`}
+                        >
+                          {active
+                            ? isAr
+                              ? "نشط"
+                              : "Active"
+                            : isAr
+                              ? "غير نشط"
+                              : "Inactive"}
+                        </span>
+                      </td>
+
+                      <td className="p-3">
+                        <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-[10px] font-black text-blue-700">
+                          {isAr ? "متصل" : "Online"}
+                        </span>
+                      </td>
+
+                      <td className="p-3 font-black text-[#102a4c]">
+                        {Math.round(
+                          Number(
+                            row.speed_kmh ||
+                              0
+                          )
+                        )}{" "}
+                        km/h
+                      </td>
+
+                      <td className="p-3 font-black text-[#102a4c]">
+                        {(
+                          Number(
+                            daily?.total_distance_m ||
+                              0
+                          ) /
+                          1000
+                        ).toFixed(1)}{" "}
+                        KM
+                      </td>
+
+                      <td className="p-3 font-bold text-slate-600">
+                        {formatTrackingDuration(
+                          Number(
+                            daily?.moving_seconds ||
+                              0
+                          )
+                        )}
+                      </td>
+
+                      <td className="p-3 font-bold text-slate-600">
+                        {formatTrackingDuration(
+                          Number(
+                            daily?.stopped_seconds ||
+                              0
+                          )
+                        )}
+                      </td>
+
+                      <td className="p-3 text-xs font-bold text-slate-500">
+                        {relativeTrackingTime(
+                          row.updated_at,
+                          isAr
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </section>
 
       {/* =====================================================
@@ -2289,6 +3004,52 @@ function KpiCard({
    CARD
 ========================================================= */
 
+function TrackingMetric({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string | number;
+  tone:
+    | "green"
+    | "amber"
+    | "blue"
+    | "cyan"
+    | "slate";
+}) {
+  const tones = {
+    green:
+      "border-emerald-100 bg-emerald-50/70 text-emerald-700",
+
+    amber:
+      "border-amber-100 bg-amber-50/70 text-amber-700",
+
+    blue:
+      "border-blue-100 bg-blue-50/70 text-blue-700",
+
+    cyan:
+      "border-cyan-100 bg-cyan-50/70 text-cyan-700",
+
+    slate:
+      "border-slate-200 bg-slate-50 text-slate-700",
+  };
+
+  return (
+    <div
+      className={`rounded-2xl border p-3 ${tones[tone]}`}
+    >
+      <p className="text-[10px] font-black opacity-70">
+        {label}
+      </p>
+
+      <p className="mt-1 text-lg font-black">
+        {value}
+      </p>
+    </div>
+  );
+}
+
 function DashboardCard({
   children,
 }: {
@@ -2730,6 +3491,164 @@ function StatusBar({
 /* =========================================================
    HELPERS
 ========================================================= */
+
+function getSaudiDateKey() {
+  const formatter =
+    new Intl.DateTimeFormat(
+      "en-CA",
+      {
+        timeZone:
+          "Asia/Riyadh",
+        year:
+          "numeric",
+        month:
+          "2-digit",
+        day:
+          "2-digit",
+      }
+    );
+
+  return formatter.format(
+    new Date()
+  );
+}
+
+function formatTrackingTime(
+  value:
+    | string
+    | null,
+  lang: Lang
+) {
+  if (!value) {
+    return "-";
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "-";
+  }
+
+  return new Intl.DateTimeFormat(
+    lang === "ar"
+      ? "ar-SA"
+      : "en-GB",
+    {
+      hour:
+        "2-digit",
+      minute:
+        "2-digit",
+      second:
+        "2-digit",
+      timeZone:
+        "Asia/Riyadh",
+    }
+  ).format(date);
+}
+
+function formatTrackingDuration(
+  seconds: number
+) {
+  const safe =
+    Math.max(
+      0,
+      Math.round(
+        Number(
+          seconds ||
+            0
+        )
+      )
+    );
+
+  const hours =
+    Math.floor(
+      safe /
+        3600
+    );
+
+  const minutes =
+    Math.floor(
+      (safe %
+        3600) /
+        60
+    );
+
+  if (
+    hours >
+    0
+  ) {
+    return `${hours}h ${minutes}m`;
+  }
+
+  return `${minutes}m`;
+}
+
+function relativeTrackingTime(
+  value:
+    | string
+    | null,
+  isAr: boolean
+) {
+  if (!value) {
+    return "-";
+  }
+
+  const time =
+    new Date(
+      value
+    ).getTime();
+
+  if (
+    !Number.isFinite(
+      time
+    )
+  ) {
+    return "-";
+  }
+
+  const minutes =
+    Math.max(
+      0,
+      Math.floor(
+        (Date.now() -
+          time) /
+          60000
+      )
+    );
+
+  if (
+    minutes <
+    1
+  ) {
+    return isAr
+      ? "الآن"
+      : "Now";
+  }
+
+  if (
+    minutes <
+    60
+  ) {
+    return isAr
+      ? `منذ ${minutes} د`
+      : `${minutes}m ago`;
+  }
+
+  const hours =
+    Math.floor(
+      minutes /
+        60
+    );
+
+  return isAr
+    ? `منذ ${hours} س`
+    : `${hours}h ago`;
+}
 
 function normalizeStatus(
   status: string | null

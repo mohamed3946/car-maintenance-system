@@ -42,7 +42,6 @@ import {
   Wrench,
   X,
   ChevronDown,
-  MessageCircle,
 } from "lucide-react";
 
 /* =========================================================
@@ -66,6 +65,13 @@ type IqamaNotification = {
   iqama: string;
   expiryDate: string;
   daysRemaining: number;
+};
+
+type RiderApplicationNotification = {
+  id: string;
+  fullName: string;
+  iqama: string;
+  createdAt: string;
 };
 
 type LanguageContextType = {
@@ -148,6 +154,16 @@ export default function AppLayout({
   >([]);
 
   const [
+    riderApplicationCount,
+    setRiderApplicationCount,
+  ] = useState(0);
+
+  const [
+    riderApplicationNotifications,
+    setRiderApplicationNotifications,
+  ] = useState<RiderApplicationNotification[]>([]);
+
+  const [
     notificationsOpen,
     setNotificationsOpen,
   ] = useState(false);
@@ -156,11 +172,6 @@ export default function AppLayout({
     operationsOpen,
     setOperationsOpen,
   ] = useState(false);
-
-  const [
-    sidebarOpen,
-    setSidebarOpen,
-  ] = useState(true);
 
   /* =========================================================
      LOAD LANGUAGE
@@ -181,40 +192,6 @@ export default function AppLayout({
   }, []);
 
   /* =========================================================
-     LOAD SIDEBAR STATE
-  ========================================================= */
-
-  useEffect(() => {
-    const savedSidebar =
-      localStorage.getItem(
-        "sidebarOpen"
-      );
-
-    if (
-      savedSidebar ===
-      "false"
-    ) {
-      setSidebarOpen(false);
-    }
-  }, []);
-
-  function toggleSidebar() {
-    setSidebarOpen(
-      (current) => {
-        const next =
-          !current;
-
-        localStorage.setItem(
-          "sidebarOpen",
-          String(next)
-        );
-
-        return next;
-      }
-    );
-  }
-
-  /* =========================================================
      KEEP OPERATIONS OPEN
   ========================================================= */
 
@@ -232,6 +209,7 @@ export default function AppLayout({
       "/employees/shifts",
       "/employees/restaurant-demand",
       "/employees/cash-management",
+      "/employees/applications",
     ];
 
     const insideOperations =
@@ -258,7 +236,6 @@ export default function AppLayout({
       "employees"
     ) {
       setIqamaAlertCount(0);
-
       setIqamaNotifications(
         []
       );
@@ -273,7 +250,7 @@ export default function AppLayout({
       } = await supabase
         .from("employees")
         .select(
-          "id,name,iqama,iqama_expiry_date,status"
+          "id,name,iqama,iqama_expiry_date"
         )
         .not(
           "iqama_expiry_date",
@@ -287,9 +264,7 @@ export default function AppLayout({
           error
         );
 
-        setIqamaAlertCount(
-          0
-        );
+        setIqamaAlertCount(0);
 
         setIqamaNotifications(
           []
@@ -314,29 +289,6 @@ export default function AppLayout({
             (
               employee
             ) => {
-              /* خارج الخدمة لا يدخل في تنبيهات الإقامة */
-
-              const status =
-                String(
-                  employee.status ||
-                    ""
-                )
-                  .trim()
-                  .toLowerCase();
-
-              if (
-                [
-                  "outofservice",
-                  "out_of_service",
-                  "out of service",
-                  "خارج الخدمة",
-                ].includes(
-                  status
-                )
-              ) {
-                return null;
-              }
-
               if (
                 !employee.iqama_expiry_date
               ) {
@@ -429,6 +381,72 @@ export default function AppLayout({
         "focus",
         handleFocus
       );
+    };
+  }, [system, pathname]);
+
+  /* =========================================================
+     RIDER APPLICATION NOTIFICATIONS
+  ========================================================= */
+
+  useEffect(() => {
+    if (system !== "employees") {
+      setRiderApplicationCount(0);
+      setRiderApplicationNotifications([]);
+      return;
+    }
+
+    async function loadRiderApplicationNotifications() {
+      const { data, error } = await supabase
+        .from("rider_applications")
+        .select("id,full_name,iqama,created_at,status")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      if (error) {
+        console.error("LOAD RIDER APPLICATION NOTIFICATIONS ERROR:", error);
+        setRiderApplicationCount(0);
+        setRiderApplicationNotifications([]);
+        return;
+      }
+
+      const items: RiderApplicationNotification[] = (data || []).map((item) => ({
+        id: String(item.id),
+        fullName: item.full_name || "-",
+        iqama: item.iqama || "-",
+        createdAt: item.created_at,
+      }));
+
+      setRiderApplicationNotifications(items);
+      setRiderApplicationCount(items.length);
+    }
+
+    loadRiderApplicationNotifications();
+
+    const channel = supabase
+      .channel("sidebar-rider-application-notifications")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "rider_applications",
+        },
+        () => {
+          loadRiderApplicationNotifications();
+        }
+      )
+      .subscribe();
+
+    const handleFocus = () => {
+      loadRiderApplicationNotifications();
+    };
+
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      supabase.removeChannel(channel);
     };
   }, [system, pathname]);
 
@@ -536,40 +554,7 @@ export default function AppLayout({
               SIDEBAR
           ================================================= */}
 
-          <aside
-            className={`
-              sticky top-0 hidden h-dvh shrink-0 flex-col overflow-hidden
-              bg-gradient-to-b from-[#062b4f] via-[#042644] to-[#02182e]
-              text-white shadow-2xl
-              transition-all duration-300 ease-in-out
-              lg:flex
-
-              ${
-                sidebarOpen
-                  ? `
-                    w-[280px]
-                    px-4
-                    py-4
-                    opacity-100
-                    rounded-e-[34px]
-
-                    xl:w-[300px]
-                    xl:px-5
-
-                    2xl:w-[330px]
-                    2xl:px-6
-                    2xl:py-5
-                  `
-                  : `
-                    w-0
-                    px-0
-                    py-4
-                    opacity-0
-                    pointer-events-none
-                  `
-              }
-            `}
-          >
+          <aside className="sticky top-0 hidden h-dvh w-[280px] shrink-0 flex-col overflow-hidden rounded-e-[34px] bg-gradient-to-b from-[#062b4f] via-[#042644] to-[#02182e] px-4 py-4 text-white shadow-2xl lg:flex xl:w-[300px] xl:px-5 2xl:w-[330px] 2xl:px-6 2xl:py-5">
             <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_30%_10%,rgba(45,120,255,0.22),transparent_35%),radial-gradient(circle_at_80%_65%,rgba(0,190,255,0.12),transparent_35%)]" />
 
             <div className="relative z-10 flex min-h-0 flex-1 flex-col">
@@ -762,6 +747,26 @@ export default function AppLayout({
                                             }
                                           </span>
                                         </span>
+
+                                        {child.href === "/employees/applications" &&
+                                          riderApplicationCount > 0 && (
+                                            <span
+                                              className={`flex min-w-6 items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-black shadow-sm ${
+                                                active
+                                                  ? "bg-white text-red-600"
+                                                  : "bg-red-500 text-white"
+                                              }`}
+                                              title={
+                                                lang === "ar"
+                                                  ? "طلبات انضمام جديدة"
+                                                  : "New rider applications"
+                                              }
+                                            >
+                                              {riderApplicationCount > 99
+                                                ? "99+"
+                                                : riderApplicationCount}
+                                            </span>
+                                          )}
                                       </Link>
                                     );
                                   }
@@ -887,52 +892,14 @@ export default function AppLayout({
               MAIN CONTENT
           ================================================= */}
 
-          <section className="min-w-0 flex-1 p-6 transition-all duration-300 lg:p-8">
+          <section className="min-w-0 flex-1 p-6 lg:p-8">
             {/* =================================================
                 TOP HEADER
             ================================================= */}
 
             <header className="mb-6 flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
               <div className="flex items-center gap-3">
-                {/* SIDEBAR BUTTON */}
-
-                <button
-                  type="button"
-                  onClick={
-                    toggleSidebar
-                  }
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-all duration-200 ${
-                    sidebarOpen
-                      ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                      : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
-                  }`}
-                  title={
-                    lang ===
-                    "ar"
-                      ? sidebarOpen
-                        ? "إغلاق القائمة الجانبية"
-                        : "فتح القائمة الجانبية"
-                      : sidebarOpen
-                        ? "Close Sidebar"
-                        : "Open Sidebar"
-                  }
-                  aria-label={
-                    lang ===
-                    "ar"
-                      ? sidebarOpen
-                        ? "إغلاق القائمة الجانبية"
-                        : "فتح القائمة الجانبية"
-                      : sidebarOpen
-                        ? "Close Sidebar"
-                        : "Open Sidebar"
-                  }
-                >
-                  {sidebarOpen ? (
-                    <X className="h-5 w-5" />
-                  ) : (
-                    <Menu className="h-5 w-5" />
-                  )}
-                </button>
+                <Menu className="h-6 w-6" />
 
                 <div>
                   <h2 className="text-xl font-bold">
@@ -997,13 +964,11 @@ export default function AppLayout({
                   >
                     <Bell className="h-6 w-6" />
 
-                    {iqamaAlertCount >
-                      0 && (
+                    {iqamaAlertCount + riderApplicationCount > 0 && (
                       <span className="absolute -right-1.5 -top-1.5 flex min-h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-black text-white shadow-sm">
-                        {iqamaAlertCount >
-                        99
+                        {iqamaAlertCount + riderApplicationCount > 99
                           ? "99+"
-                          : iqamaAlertCount}
+                          : iqamaAlertCount + riderApplicationCount}
                       </span>
                     )}
                   </button>
@@ -1024,15 +989,15 @@ export default function AppLayout({
                           <h3 className="text-sm font-black text-[#102a4c]">
                             {lang ===
                             "ar"
-                              ? "تنبيهات الإقامات"
-                              : "Iqama Alerts"}
+                              ? "مركز الإشعارات"
+                              : "Notification Center"}
                           </h3>
 
                           <p className="mt-0.5 text-[11px] font-bold text-slate-400">
                             {lang ===
                             "ar"
-                              ? "الإقامات المنتهية أو التي يتبقى عليها 30 يومًا أو أقل"
-                              : "Expired Iqamas or those with 30 days or less remaining"}
+                              ? "طلبات الانضمام الجديدة وتنبيهات الإقامات"
+                              : "New rider applications and Iqama alerts"}
                           </p>
                         </div>
 
@@ -1049,8 +1014,40 @@ export default function AppLayout({
                         </button>
                       </div>
 
-                      {iqamaNotifications.length ===
-                      0 ? (
+                      {riderApplicationNotifications.length > 0 && (
+                        <div className="border-b border-slate-100">
+                          <div className="bg-blue-50/70 px-4 py-2 text-[11px] font-black text-blue-700">
+                            {lang === "ar" ? "طلبات انضمام جديدة" : "New Rider Applications"}
+                          </div>
+
+                          {riderApplicationNotifications.map((notification) => (
+                            <Link
+                              key={notification.id}
+                              href="/employees/applications"
+                              onClick={() => setNotificationsOpen(false)}
+                              className="flex items-start gap-3 border-b border-slate-100 px-4 py-3 transition last:border-b-0 hover:bg-slate-50"
+                            >
+                              <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                                <Users className="h-5 w-5" />
+                              </div>
+
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-black text-[#102a4c]">
+                                  {notification.fullName}
+                                </p>
+                                <p dir="ltr" className="mt-1 text-[11px] font-bold text-slate-400">
+                                  {notification.iqama}
+                                </p>
+                                <p className="mt-1 text-[11px] font-semibold text-blue-600">
+                                  {lang === "ar" ? "طلب انضمام جديد بانتظار المراجعة" : "New application awaiting review"}
+                                </p>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                      )}
+
+                      {iqamaNotifications.length === 0 && riderApplicationNotifications.length === 0 ? (
                         <div className="flex min-h-[180px] flex-col items-center justify-center px-5 text-center">
                           <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
                             <CheckCircle2 className="h-5 w-5" />
@@ -1066,8 +1063,8 @@ export default function AppLayout({
                           <p className="mt-1 text-xs font-bold text-slate-400">
                             {lang ===
                             "ar"
-                              ? "كل الإقامات المسجلة خارج نطاق التنبيه."
-                              : "All recorded Iqamas are outside the alert range."}
+                              ? "لا توجد طلبات جديدة أو إقامات تحتاج متابعة."
+                              : "No new applications or Iqama alerts require attention."}
                           </p>
                         </div>
                       ) : (
@@ -1469,6 +1466,8 @@ function getMenuItems(
         ),
 
         children: [
+          /* PERFORMANCE */
+
           {
             name:
               lang ===
@@ -1483,6 +1482,8 @@ function getMenuItems(
               <ClipboardList className="h-5 w-5" />
             ),
           },
+
+          /* LIVE TRACKING */
 
           {
             name:
@@ -1499,6 +1500,8 @@ function getMenuItems(
             ),
           },
 
+          /* SHIFTS */
+
           {
             name:
               lang ===
@@ -1514,6 +1517,8 @@ function getMenuItems(
             ),
           },
 
+          /* RESTAURANT RADAR */
+
           {
             name:
               lang ===
@@ -1528,19 +1533,9 @@ function getMenuItems(
               <Flame className="h-5 w-5" />
             ),
           },
-{
-  name:
-    lang === "ar"
-      ? "التواصل مع المناديب"
-      : "Rider Communication",
 
-  href:
-    "/employees/communication",
+          /* CASH */
 
-  icon: (
-    <MessageCircle className="h-5 w-5" />
-  ),
-},
           {
             name:
               lang ===
@@ -1555,10 +1550,26 @@ function getMenuItems(
               <Wallet className="h-5 w-5" />
             ),
           },
+
+          {
+            name:
+              lang === "ar"
+                ? "طلبات انضمام المناديب"
+                : "Rider Applications",
+
+            href:
+              "/employees/applications",
+
+            icon: (
+              <Users className="h-5 w-5" />
+            ),
+          },
         ],
       },
 
-      /* NOTICES */
+      /* =====================================================
+         NOTICES
+      ===================================================== */
 
       {
         name:
@@ -1576,7 +1587,9 @@ function getMenuItems(
         ),
       },
 
-      /* PAYROLL */
+      /* =====================================================
+         PAYROLL
+      ===================================================== */
 
       {
         name:
@@ -1594,7 +1607,9 @@ function getMenuItems(
         ),
       },
 
-      /* REPORTS */
+      /* =====================================================
+         REPORTS
+      ===================================================== */
 
       {
         name:
@@ -1612,7 +1627,9 @@ function getMenuItems(
         ),
       },
 
-      /* SETTINGS */
+      /* =====================================================
+         SETTINGS
+      ===================================================== */
 
       {
         name:

@@ -49,6 +49,7 @@ type Employee = {
   keeta_id: string | null;
   hunger_id: string | null;
   vehicle_number: string | null;
+  employment_stage: string | null;
 };
 
 type EmployeeStatus =
@@ -271,8 +272,10 @@ function EmployeesListContent() {
           platform_id,
           keeta_id,
           hunger_id,
-          vehicle_number
+          vehicle_number,
+          employment_stage
         `)
+        .eq("employment_stage", "employee")
         .order("name", {
           ascending: true,
         });
