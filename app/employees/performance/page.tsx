@@ -15,10 +15,7 @@ import {
   FileSpreadsheet,
   Gauge,
   MapPin,
-  MapPinned,
-  PackageCheck,
   RefreshCw,
-  Route,
   Search,
   TrendingUp,
   Upload,
@@ -40,7 +37,7 @@ import {
   Platform,
 } from "./types";
 
-import { qualityBonusByBatch } from "./utils";
+import { ordersPerWorkingDay, qualityBonusByBatch } from "./utils";
 
 import {
   importPerformanceReport,
@@ -112,6 +109,7 @@ function PerformanceContent() {
   const [loadingReports, setLoadingReports] = useState(false);
   const [loadingRecords, setLoadingRecords] = useState(false);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [dailyDataVersion, setDailyDataVersion] = useState(0);
 
   const [riderSearch, setRiderSearch] = useState("");
   const [detailsMode, setDetailsMode] = useState<"all" | "top" | "weak">("all");
@@ -162,6 +160,7 @@ function PerformanceContent() {
       );
     } else {
       setRecords((data || []) as PerformanceRecord[]);
+      setDailyDataVersion((current) => current + 1);
     }
 
     setLoadingRecords(false);
@@ -1296,6 +1295,7 @@ function PerformanceContent() {
 
           {platform === "hunger" ? (
             <PremiumHungerDetailsTable
+              key={dailyDataVersion}
               rows={visibleHungerRows}
               isArabic={isArabic}
             />
@@ -1341,6 +1341,7 @@ function PremiumHungerDetailsTable({
     Record<string, DailyDisplayRow[]>
   >({});
   const [loadingRiderId, setLoadingRiderId] = useState<number | null>(null);
+  const [dailyErrors, setDailyErrors] = useState<Record<string, boolean>>({});
 
   async function toggleRider(rider: HungerRow) {
     if (expandedId === rider.id) {
@@ -1359,32 +1360,39 @@ function PremiumHungerDetailsTable({
 
   async function loadDailyRider(riderId: number) {
     setLoadingRiderId(riderId);
+    setDailyErrors((current) => ({ ...current, [String(riderId)]: false }));
 
     try {
       const reportMonth = getCurrentPerformanceMonth();
 
-      const { data: riderData, error: riderError } = await supabase
-        .from("hunger_daily_performance")
-        .select(
-          "work_date, completed_deliveries, total_km, payable_km, avg_km"
-        )
-        .eq("report_month", reportMonth)
-        .eq("rider_platform_id", String(riderId))
-        .order("work_date", { ascending: true });
+      const riderData: DailyRecord[] = [];
+      const pageSize = 1000;
+      for (let offset = 0; ; offset += pageSize) {
+        const { data, error } = await supabase
+          .from("hunger_daily_performance")
+          .select("work_date, completed_deliveries, total_km, payable_km, avg_km")
+          .eq("report_month", reportMonth)
+          .eq("rider_platform_id", String(riderId))
+          .order("work_date", { ascending: true })
+          .order("completed_deliveries", { ascending: true })
+          .order("total_km", { ascending: true })
+          .order("payable_km", { ascending: true })
+          .range(offset, offset + pageSize - 1);
+        if (error) throw error;
+        riderData.push(...(data || []));
+        if ((data || []).length < pageSize) break;
+      }
 
-      if (riderError) throw riderError;
-
-      const { data: reportDates, error: datesError } = await supabase
-        .from("hunger_daily_performance")
-        .select("work_date")
-        .eq("report_month", reportMonth)
-        .order("work_date", { ascending: true });
-
-      if (datesError) throw datesError;
-
-      const dates = (reportDates || [])
-        .map((row: any) => String(row.work_date || ""))
-        .filter(Boolean);
+      const [firstResult, lastResult] = await Promise.all([
+        supabase.from("hunger_daily_performance").select("work_date")
+          .eq("report_month", reportMonth).order("work_date", { ascending: true }).limit(1),
+        supabase.from("hunger_daily_performance").select("work_date")
+          .eq("report_month", reportMonth).order("work_date", { ascending: false }).limit(1),
+      ]);
+      if (firstResult.error) throw firstResult.error;
+      if (lastResult.error) throw lastResult.error;
+      const dates = [firstResult.data?.[0]?.work_date, lastResult.data?.[0]?.work_date]
+        .filter((date): date is string => Boolean(date));
 
       if (!dates.length) {
         setDailyRowsByRider((current) => ({
@@ -1400,13 +1408,14 @@ function PremiumHungerDetailsTable({
 
       const riderMap = new Map<string, DailyRecord>();
 
-      (riderData || []).forEach((row: any) => {
+      riderData.forEach((row) => {
+        const previous = riderMap.get(String(row.work_date));
         riderMap.set(String(row.work_date), {
           work_date: String(row.work_date),
-          completed_deliveries: Number(row.completed_deliveries || 0),
-          total_km: Number(row.total_km || 0),
-          payable_km: Number(row.payable_km || 0),
-          avg_km: Number(row.avg_km || 0),
+          completed_deliveries: (previous?.completed_deliveries || 0) + Number(row.completed_deliveries || 0),
+          total_km: (previous?.total_km || 0) + Number(row.total_km || 0),
+          payable_km: (previous?.payable_km || 0) + Number(row.payable_km || 0),
+          avg_km: 0,
         });
       });
 
@@ -1422,7 +1431,7 @@ function PremiumHungerDetailsTable({
           completedDeliveries: Math.round(deliveries),
           totalKm: Math.round(Number(record?.total_km || 0)),
           payableKm: Math.round(Number(record?.payable_km || 0)),
-          avgKm: Math.round(Number(record?.avg_km || 0)),
+          avgKm: deliveries > 0 ? Math.round(Number(record?.total_km || 0) / deliveries) : 0,
         };
       });
 
@@ -1433,12 +1442,9 @@ function PremiumHungerDetailsTable({
     } catch (error) {
       console.error("LOAD DAILY HUNGER PERFORMANCE ERROR:", error);
 
-      setDailyRowsByRider((current) => ({
-        ...current,
-        [String(riderId)]: [],
-      }));
+      setDailyErrors((current) => ({ ...current, [String(riderId)]: true }));
     } finally {
-      setLoadingRiderId(null);
+      setLoadingRiderId((current) => current === riderId ? null : current);
     }
   }
 
@@ -1460,9 +1466,9 @@ function PremiumHungerDetailsTable({
           <thead>
             <tr className="bg-[#102a4c] text-white">
               <PremiumTh className="min-w-[330px]">{isArabic ? "المندوب" : "Rider"}</PremiumTh>
-              <PremiumTh align="center">Batch</PremiumTh>
               <PremiumTh align="center">{isArabic ? "المستوى" : "Level"}</PremiumTh>
               <PremiumTh align="center">{isArabic ? "الطلبات" : "Orders"}</PremiumTh>
+              <PremiumTh align="center">{isArabic ? "معدل الطلبات / اليوم" : "Orders / Day"}</PremiumTh>
               <PremiumTh align="center">{isArabic ? "أيام العمل" : "Days"}</PremiumTh>
               <PremiumTh align="center">{isArabic ? "الحضور" : "Attendance"}</PremiumTh>
               <PremiumTh align="center">{isArabic ? "القبول" : "Acceptance"}</PremiumTh>
@@ -1501,6 +1507,8 @@ function PremiumHungerDetailsTable({
                       <button
                         type="button"
                         onClick={() => toggleRider(rider)}
+                        aria-expanded={isExpanded}
+                        aria-controls={`daily-performance-${rider.id}`}
                         className="flex w-full items-start gap-3 text-start"
                       >
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-700">
@@ -1522,12 +1530,6 @@ function PremiumHungerDetailsTable({
                       </button>
                     </td>
 
-                    <PremiumTd strong align="center">
-                      {rider.batchNumber > 0
-                        ? integerFormat(rider.batchNumber)
-                        : "-"}
-                    </PremiumTd>
-
                     <td className="px-3 py-3.5 text-center">
                       <span
                         className={`inline-flex min-w-8 justify-center rounded-lg px-2 py-1 text-[11px] font-black ${levelClass(
@@ -1540,6 +1542,9 @@ function PremiumHungerDetailsTable({
 
                     <PremiumTd strong align="center">
                       {integerFormat(rider.completedDeliveries)}
+                    </PremiumTd>
+                    <PremiumTd strong align="center">
+                      {ordersPerWorkingDay(rider.completedDeliveries, rider.workingDays).toLocaleString("en-US", { maximumFractionDigits: 2 })}
                     </PremiumTd>
                     <PremiumTd align="center">
                       {integerFormat(rider.workingDays)}
@@ -1570,12 +1575,19 @@ function PremiumHungerDetailsTable({
 
                   {isExpanded && (
                     <tr className="border-b border-blue-100 bg-[#f7fbff]">
-                      <td colSpan={14} className="p-0">
-                        <DailyPerformancePremium
+                      <td id={`daily-performance-${rider.id}`} colSpan={14} className="p-0">
+                        {dailyErrors[String(rider.id)] ? (
+                          <div className="p-5 text-center text-sm font-bold text-red-600">
+                            <p>{isArabic ? "تعذر تحميل التفاصيل اليومية" : "Failed to load daily details"}</p>
+                            <button type="button" onClick={() => loadDailyRider(rider.id)} className="mt-2 text-blue-700 underline">
+                              {isArabic ? "إعادة المحاولة" : "Retry"}
+                            </button>
+                          </div>
+                        ) : <DailyPerformancePremium
                           rows={dailyRows}
                           loading={loadingRiderId === rider.id}
                           isArabic={isArabic}
-                        />
+                        />}
                       </td>
                     </tr>
                   )}
@@ -1670,72 +1682,46 @@ function DailyPerformancePremium({
         </div>
       </div>
 
-      <div
-        className="grid gap-2"
-        style={{
-          gridTemplateColumns: "repeat(auto-fit, minmax(118px, 1fr))",
-        }}
-      >
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
         {rows.map((row) => (
           <div
             key={row.date}
-            className={`rounded-2xl border p-2.5 shadow-sm transition ${
+            className={`rounded-2xl border p-3 shadow-sm ${
               row.worked
-                ? "border-emerald-200 bg-emerald-50/75"
-                : "border-red-200 bg-red-50/70"
+                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                : "border-red-200 bg-red-50 text-red-700"
             }`}
           >
             <div className="flex items-center justify-between gap-2">
-              <span
-                className={`text-[11px] font-black ${
-                  row.worked ? "text-emerald-800" : "text-red-700"
-                }`}
-              >
+              <span className="text-xs font-black">
                 {formatDailyPerformanceDate(row.date, isArabic)}
               </span>
-              <span
-                className={`h-2 w-2 rounded-full ${
-                  row.worked ? "bg-emerald-500" : "bg-red-500"
-                }`}
-              />
+              <span className="rounded-lg bg-white/80 px-2 py-1 text-[10px] font-black">
+                {row.worked
+                  ? isArabic ? "عمل" : "Worked"
+                  : isArabic ? "غياب" : "Absent"}
+              </span>
             </div>
-
-            <p
-              className={`mt-1 text-[10px] font-black ${
-                row.worked ? "text-emerald-600" : "text-red-600"
-              }`}
-            >
-              {row.worked
-                ? isArabic
-                  ? "عمل"
-                  : "Worked"
-                : isArabic
-                  ? "غياب"
-                  : "Absent"}
-            </p>
-
-            <div className="mt-2 space-y-1.5 rounded-xl bg-white/90 p-2">
-              <DailyLine
-                icon={<PackageCheck className="h-3 w-3" />}
-                label={isArabic ? "طلب" : "Orders"}
-                value={integerFormat(row.completedDeliveries)}
-              />
-
-              {row.worked && (
-                <>
-                  <DailyLine
-                    icon={<Route className="h-3 w-3" />}
-                    label={isArabic ? "إجمالي KM" : "Total KM"}
-                    value={integerFormat(row.totalKm)}
-                  />
-                  <DailyLine
-                    icon={<MapPinned className="h-3 w-3" />}
-                    label={isArabic ? "KM مستحق" : "Payable KM"}
-                    value={integerFormat(row.payableKm)}
-                  />
-                </>
-              )}
+            <div className="mt-3 rounded-xl bg-white/80 p-3 text-center">
+              <p className="text-2xl font-black">
+                {integerFormat(row.completedDeliveries)}
+              </p>
+              <p className="mt-1 text-[11px] font-bold">
+                {isArabic ? "طلبات" : "Orders"}
+              </p>
             </div>
+            {row.worked && (
+              <div className="mt-3 space-y-1 text-[10px] font-bold">
+                <div className="flex items-center justify-between gap-2">
+                  <span>{isArabic ? "إجمالي KM" : "Total KM"}</span>
+                  <span>{integerFormat(row.totalKm)}</span>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <span>{isArabic ? "KM مستحق" : "Payable KM"}</span>
+                  <span>{integerFormat(row.payableKm)}</span>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -1762,26 +1748,6 @@ function DailySummaryChip({
     <div className={`rounded-xl border px-3 py-2 text-center ${tones[tone]}`}>
       <p className="text-[9px] font-black opacity-70">{label}</p>
       <p className="mt-0.5 text-sm font-black">{integerFormat(value)}</p>
-    </div>
-  );
-}
-
-function DailyLine({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="flex items-center gap-1 text-[9px] font-bold text-slate-400">
-        {icon}
-        {label}
-      </span>
-      <strong className="text-[10px] text-[#102a4c]">{value}</strong>
     </div>
   );
 }

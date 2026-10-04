@@ -1,4 +1,5 @@
 import { supabase } from "../../lib/supabase";
+import { isExcludedRiderStatus } from "./utils";
 
 import { analyzeHungerRider } from "./engine/hungerEngine";
 import { analyzeKeetaRider } from "./engine/keetaEngine";
@@ -457,12 +458,34 @@ parsedRows.forEach((row) => {
 }
 
 export async function loadPerformanceRecords(platform: PlatformType) {
-  return supabase
-    .from("performance_records")
-    .select("*")
-    .eq("platform", platform)
-    .eq("report_month", getReportMonth())
-    .order("orders", { ascending: false });
+  const [recordsResult, employeesResult] = await Promise.all([
+    supabase
+      .from("performance_records")
+      .select("*")
+      .eq("platform", platform)
+      .eq("report_month", getReportMonth())
+      .order("orders", { ascending: false }),
+    supabase.from("employees").select("id, platform_id, status"),
+  ]);
+
+  const error = recordsResult.error || employeesResult.error;
+  if (error) return { data: null, error };
+
+  const excludedEmployees = (employeesResult.data || []).filter((employee) =>
+    isExcludedRiderStatus(employee.status)
+  );
+  const excludedIds = new Set(excludedEmployees.map((employee) => employee.id));
+  const excludedPlatformIds = new Set(
+    excludedEmployees.map((employee) => String(employee.platform_id || "").trim()).filter(Boolean)
+  );
+
+  return {
+    data: (recordsResult.data || []).filter((record) =>
+      !excludedIds.has(record.employee_id) &&
+      !excludedPlatformIds.has(String(record.rider_platform_id || "").trim())
+    ),
+    error: null,
+  };
 }
 export async function loadHungerEmployees() {
   const { data, error } = await supabase
@@ -479,7 +502,7 @@ export async function loadHungerEmployees() {
   const hungerEmployees = (data || []).filter((employee: any) => {
     const platformId = String(employee.platform_id || "").trim();
 
-    if (!platformId) return false;
+    if (!platformId || isExcludedRiderStatus(employee.status)) return false;
 
     const workLocation = String(
       employee.work_location || ""
